@@ -9,6 +9,7 @@
             [metabase.email :as email]
             [metabase.events :as events]
             [metabase.integrations.slack :as slack]
+            [metabase.integrations.telegram :as telegram]
             [metabase.models.card :refer [Card]]
             [metabase.models.collection :refer [Collection]]
             [metabase.models.dashboard :refer [Dashboard]]
@@ -204,6 +205,15 @@
    :completed   (slack/slack-configured?)
    :triggered   :always})
 
+(defmethod admin-checklist-entry :set-telegram-credentials
+  [_]
+  {:title       (tru "Set Telegram credentials")
+   :group       (tru "Get connected")
+   :description (tru "Does your team use Telegram? If so, you can send automated updates via pulses and ask questions with MetaBot.")
+   :link        "/admin/settings/telegram"
+   :completed   (telegram/telegram-configured?)
+   :triggered   :always})
+
 (defmethod admin-checklist-entry :invite-team-members
   [_]
   {:title       (tru "Invite team members")
@@ -255,7 +265,7 @@
 (defn- admin-checklist-values []
   (map
    admin-checklist-entry
-   [:add-a-database :set-up-email :set-slack-credentials :invite-team-members :hide-irrelevant-tables
+   [:add-a-database :set-up-email :set-slack-credentials :set-telegram-credentials :invite-team-members :hide-irrelevant-tables
     :organize-questions :create-metrics :create-segments]))
 
 (defn- add-next-step-info
