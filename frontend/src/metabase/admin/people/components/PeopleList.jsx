@@ -29,6 +29,7 @@ import { PLUGIN_ADMIN_USER_MENU_ITEMS } from "metabase/plugins";
 })
 @User.loadList({
   reload: true,
+  keepListWhileLoading: true,
   query: (_, { query }) => ({
     query: query.searchText,
     status: query.status,
