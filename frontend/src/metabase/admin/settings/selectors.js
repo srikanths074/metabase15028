@@ -70,6 +70,7 @@ const SECTIONS = updateSectionsWithPlugins({
         type: "string",
         widget: SiteUrlWidget,
         warningMessage: t`Only change this if you know what you're doing!`,
+        getHidden: settings => settings["is-hosted?"],
       },
       {
         key: "redirect-all-requests-to-https",
@@ -124,6 +125,7 @@ const SECTIONS = updateSectionsWithPlugins({
     name: t`Updates`,
     order: 3,
     component: SettingsUpdatesForm,
+    getHidden: settings => settings["is-hosted?"],
     settings: [
       {
         key: "check-for-updates",
@@ -136,6 +138,7 @@ const SECTIONS = updateSectionsWithPlugins({
     name: t`Email`,
     order: 4,
     component: SettingsEmailForm,
+    getHidden: settings => settings["is-hosted?"],
     settings: [
       {
         key: "email-smtp-host",
