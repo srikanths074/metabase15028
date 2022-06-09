@@ -508,7 +508,7 @@ class TableInteractive extends Component {
           transition: dragColIndex != null ? "left 200ms" : null,
           backgroundColor,
         }}
-        className={cx("TableInteractive-cellWrapper text-dark", {
+        className={cx("TableInteractive-cellWrapper text-dark table-cell", {
           "TableInteractive-cellWrapper--firstColumn": columnIndex === 0,
           padLeft: columnIndex === 0 && !showDetailShortcut,
           "TableInteractive-cellWrapper--lastColumn":
@@ -542,6 +542,8 @@ class TableInteractive extends Component {
           showDetailShortcut ? e => this.handleLeaveRow() : undefined
         }
         tabIndex="0"
+        data-rowindex={rowIndex}
+        data-columnindex={columnIndex}
       >
         {this.props.renderTableCellWrapper(cellData)}
       </div>
