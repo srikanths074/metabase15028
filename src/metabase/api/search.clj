@@ -348,8 +348,8 @@
                        [:= 0 1])}))
         table-db-id))))
 
-(defn order-clause
-  "CASE expression that lets the results be ordered by whether they're an exact (non-fuzzy) match or not"
+(defn exact-match-clause
+  "Or expression that lets the results be ordered by whether they're an exact (non-fuzzy) match or not"
   [query]
   (let [match             (wildcard-match (scoring/normalize query))
         columns-to-search (->> all-search-columns
@@ -357,10 +357,8 @@
                                (map first)
                                (remove #{:collection_authority_level :moderated_status :initial_sync_status}))
         case-clauses      (as-> columns-to-search <>
-                            (map (fn [col] [:like (hsql/call :lower col) match]) <>)
-                            (interleave <> (repeat 0))
-                            (concat <> [:else 1]))]
-    (apply hsql/call :case case-clauses)))
+                            (map (fn [col] [:like (hsql/call :lower col) match]) <>))]
+    (into [:or] case-clauses)))
 
 (defmulti ^:private check-permissions-for-model
   {:arglists '([search-result])}
@@ -393,7 +391,7 @@
                        query-with-limit (hh/limit search-query 1)]
                    (db/query query-with-limit))))))
 
-(defn- full-search-query
+(defn- full-search-queries
   "Postgres 9 is not happy with the type munging it needs to do
   to make the union-all degenerate down to trivial case of one model without errors.
   Therefore, we degenerate it down for it"
@@ -401,15 +399,26 @@
   (let [models       (or (:models search-ctx)
                          search-config/all-models)
         sql-alias    :alias_is_required_by_sql_but_not_needed_here
-        order-clause [((fnil order-clause "") (:search-string search-ctx))]]
+        exact-match-clause ((fnil exact-match-clause "") (:search-string search-ctx))]
     (if (= (count models) 1)
-      (search-query-for-model (first models) search-ctx)
-      {:select [:*]
-       :from [[{:union-all (for [model models
-                                 :let  [query (search-query-for-model model search-ctx)]
-                                 :when (seq query)]
-                             query)} sql-alias]]
-       :order-by order-clause})))
+      {:exact-match   {:select [:*]
+                       :from   [[(search-query-for-model (first models) search-ctx) sql-alias]]
+                       :where  exact-match-clause}
+       :inexact-match {:select [:*]
+                       :from   [[(search-query-for-model (first models) search-ctx) sql-alias]]
+                       :where  [:not exact-match-clause]}}
+      {:exact-match   {:select [:*]
+                       :from   [[{:union-all (for [model models
+                                                   :let  [query (search-query-for-model model search-ctx)]
+                                                   :when (seq query)]
+                                               query)} sql-alias]]
+                       :where  exact-match-clause}
+       :inexact-match {:select [:*]
+                       :from   [[{:union-all (for [model models
+                                                   :let  [query (search-query-for-model model search-ctx)]
+                                                   :when (seq query)]
+                                               query)} sql-alias]]
+                       :where  [:not exact-match-clause]}})))
 
 (s/defn ^:private search
   "Builds a search query that includes all of the searchable entities and runs it"
