@@ -6,14 +6,11 @@ import Calendar from "metabase/components/Calendar";
 import moment from "moment";
 import Filter from "metabase-lib/lib/queries/structured/Filter";
 import { TimeContainer } from "./RangeDatePicker.styled";
-import {
-  hasTimeComponent,
-  setTimeComponent,
-  TIME_SELECTOR_DEFAULT_HOUR,
-  TIME_SELECTOR_DEFAULT_MINUTE,
-} from "metabase/lib/query_time";
+import { setTimeComponent } from "metabase/lib/query_time";
 import SingleDatePicker, { SingleDatePickerProps } from "./SingleDatePicker";
 import SpecificDatePicker from "./SpecificDatePicker";
+import { getTemporalUnit } from "./utils";
+import { formatFilterDate } from "metabase/modes/lib/actions";
 
 type BetweenPickerProps = {
   className?: string;
@@ -24,6 +21,19 @@ type BetweenPickerProps = {
   hideTimeSelectors?: boolean;
 };
 
+const getEndValue = (field: Filter, endValue: string) => {
+  const temporalUnit = getTemporalUnit(field);
+  if (!temporalUnit || temporalUnit === "day") {
+    return endValue;
+  }
+
+  const end = formatFilterDate(
+    moment(endValue).endOf(temporalUnit),
+    temporalUnit,
+  );
+  return end;
+};
+
 export const BetweenPicker = ({
   className,
   filter: [op, field, startValue, endValue],
@@ -31,14 +41,10 @@ export const BetweenPicker = ({
   hideTimeSelectors,
   primaryColor,
 }: BetweenPickerProps) => {
-  let endDatetime = endValue;
-  if (hasTimeComponent(startValue) && !hasTimeComponent(endValue)) {
-    endDatetime = setTimeComponent(
-      endValue,
-      TIME_SELECTOR_DEFAULT_HOUR,
-      TIME_SELECTOR_DEFAULT_MINUTE,
-    );
+  if (op === "=") {
+    endValue = startValue;
   }
+  const normalizedEndValue = getEndValue(field, endValue);
   return (
     <div className={className} data-testid="between-date-picker">
       <TimeContainer>
@@ -52,7 +58,7 @@ export const BetweenPicker = ({
         </div>
         <div>
           <SpecificDatePicker
-            value={endValue}
+            value={normalizedEndValue}
             primaryColor={primaryColor}
             hideTimeSelectors={hideTimeSelectors}
             onClear={() =>
@@ -73,7 +79,7 @@ export const BetweenPicker = ({
           primaryColor={primaryColor}
           initial={startValue}
           selected={startValue && moment(startValue)}
-          selectedEnd={endValue && moment(endValue)}
+          selectedEnd={endValue && moment(normalizedEndValue)}
           onChange={(startValue, endValue) =>
             onFilterChange([op, field, startValue, endValue])
           }
