@@ -409,9 +409,24 @@
 
 (deftest render-bar-graph-test
   (testing "Render a bar graph with non-nil values for the x and y axis"
-    (is (has-inline-image?
-         (render-bar-graph {:cols default-columns
-                            :rows [[10.0 1] [5.0 10] [2.50 20] [1.25 30]]}))))
+    (let [col-headers ["Price" "NumPurchased"]
+          rows [[10.0 1] [5.0 10] [2.50 20] [1.25 30]]
+          rendered-bars (-> (concat [col-headers] rows)
+                            (render.tu/make-card-and-data :bar)
+                            render.tu/render-as-hiccup
+                            (render.tu/nodes-with-tag :rect)
+                            (->> (map #(select-keys (second %) [:x :height]))))]
+      (is (= (count rows) (count rendered-bars))
+          "correct number of bars are rendered")
+      (is (= (sort-by :x rendered-bars)
+             (sort-by :height rendered-bars))
+          "leftmost bar is shortest, rightmost bar is tallest, as expected by rows passed in")
+      (let [first-height (second (first rows))
+            first-rendered-height (:height (first rendered-bars))]
+        (is (= (map #(Math/ceil (/ (second %) (double first-height))) rows)
+               (map #(Math/ceil (/ (:height %) (double first-rendered-height))) rendered-bars))
+            "bar height ratios match the input row value ratios"))))
+
   (testing "Check to make sure we allow nil values for the y-axis"
     (is (has-inline-image?
          (render-bar-graph {:cols default-columns
@@ -429,6 +444,42 @@
           (render-multiseries-bar-graph
             {:cols default-multi-columns
              :rows [[10.0 1 1231 1] [5.0 10 nil 111] [2.50 20 11 1] [1.25 nil 1231 11]]})))))
+
+(deftest render-row-graph-test
+  (testing "Render a row graph with non-nil values for the x and y axis"
+    (let [col-headers ["Price" "NumPurchased"]
+          rows [[10.0 1] [5.0 10] [2.50 20] [1.25 30]]
+          rendered-bars (-> (concat [col-headers] rows)
+                            (render.tu/make-card-and-data :row)
+                            render.tu/render-as-hiccup
+                            (render.tu/nodes-with-tag :rect)
+                            (->> (map #(select-keys (second %) [:y :width]))))]
+      (is (= (count rows) (count rendered-bars))
+          "correct number of bars are rendered")
+      (is (= (sort-by :y rendered-bars)
+             (sort-by :width rendered-bars))
+          "leftmost bar is shortest, rightmost bar is tallest, as expected by rows passed in")
+      (let [first-width (second (first rows))
+            first-rendered-width (:width (first rendered-bars))]
+        (is (= (map #(Math/ceil (/ (second %) (double first-width))) rows)
+               (map #(Math/ceil (/ (:width %) (double first-rendered-width))) rendered-bars))
+            "bar height ratios match the input row value ratios")))))
+
+(deftest render-gauge-chart-test
+  (testing "Render a gauge chart"
+    (let [render (-> [["A"] [12.34]]
+                     (render.tu/make-card-and-data :gauge)
+                     (assoc-in [:card :visualization_settings :gauge.segments] [{:min 0 :max 100 :color "green" :label ""}])
+                     render.tu/render-as-hiccup)]
+      (is (= 2 ;; 2 nodes because there is a second text element w/ large white stroke to improve legibility
+             (-> render
+                 (render.tu/nodes-with-text "12.34")
+                 count))
+          "Gauge value is rendered.")
+      (is (= 4 ;; 4 nodes because there are 2 for the arrow, 1 for the background of the gauge, and 1 for the gauge segment
+             (-> render
+                 (render.tu/nodes-with-tag :path)
+                 count))))))
 
 (defn- render-area-graph [results]
   (body/render :area :inline pacific-tz render.tu/test-card nil results))

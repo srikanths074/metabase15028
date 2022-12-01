@@ -118,10 +118,13 @@
       :progress    {}
       :scalar      {}
       :smartscalar {}
-      :gauge       {}
+      :gauge       {:gauge.segments [{:min 0, :max 10, :color "#ED6E6E", :label ""}
+                                     {:min 10, :max 20, :color "#F9CF48", :label ""}
+                                     {:min 20, :max 40, :color "#84BB4C", :label ""}]}
       :table       {}
       :scatter     {}
-      :row         {}
+      :row         {:graph.dimensions [(first header-row)]
+                    :graph.metrics (vec (rest header-row))}
       :list        {}
       :pivot       {}} display-type)))
 
@@ -159,7 +162,7 @@
    :gauge       #{}
    :table       #{:custom-column-names :reordered-columns :hidden-columns :custom-column-formatting}
    :scatter     #{}
-   :row         #{}
+   :row         #{:goal-line :multi-series :stack}
    :list        #{}
    :pivot       #{}})
 
@@ -400,8 +403,12 @@
   [attrs]
   (when attrs
     (into {} (map (fn [i]
-                    (let [item (bean (.item attrs i))]
-                      [(keyword (:name item)) (:value item)]))
+                    (let [item (bean (.item attrs i))
+                          unparsed-value (:value item)
+                          value (or (parse-long unparsed-value)
+                                    (parse-double unparsed-value)
+                                    unparsed-value)]
+                      [(keyword (:name item)) value]))
                   (range (.getLength attrs))))))
 
 (defn- hiccup-zip
