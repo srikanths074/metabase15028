@@ -3,6 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clout.core :as clout]
             [compojure.core :as compojure]
             [honeysql.types :as htypes]
             [medley.core :as m]
@@ -11,7 +12,7 @@
              [add-route-param-regexes auto-parse route-dox route-fn-name validate-params wrap-response-if-needed]]
             [metabase.models.interface :as mi]
             [metabase.util :as u]
-            [metabase.util.i18n :as i18n :refer [deferred-tru tru]]
+            [metabase.util.i18n :as i18n :refer [deferred-tru trs tru]]
             [metabase.util.schema :as su]
             [schema.core :as schema]
             [toucan.db :as db]))
@@ -237,6 +238,94 @@
                                   (ns-name *ns*) fn-name)))
       (assoc parsed :fn-name fn-name, :route route, :docstr docstr))))
 
+(def ^:private content-type->regex
+  "A map of content type to a regex that should match that content type."
+  {:content/json #"^application/(.+\+)?json"
+   :content/form #"(^application/x-www-form-urlencoded)|(multipart/form-data)|(application/form)"
+   :content/*    (constantly true)})
+
+(defn content-type-matches?
+  "Takes the request's content type and the allowable content types (:content/json, :content/form) and verifies if the actual content type is allowed."
+  [actual allowable]
+  (letfn [(allowable-content? [content-type]
+            (let [matcher (content-type->regex content-type)]
+              (if (instance? java.util.regex.Pattern matcher)
+                (when actual
+                  (re-find (content-type->regex content-type) actual))
+                (matcher actual))))]
+    (some allowable-content? allowable)))
+
+(defn matching-route
+  "Custom route matching behavior to assert on content-type.
+  Rules: if route is a POST:
+  - if it matches, only allow under the conditions:
+    - zero content length and body has zero content
+    - content-type provided and is allowed on the route
+    - content-length not provided but body is empty
+  "
+  [route content-types]
+  (let [prepared (#'compojure/prepare-route route)]
+    (reify clout/Route
+      (route-matches [_ request]
+        (when-let [matched (clout/route-matches prepared request)]
+          (let [content-type (get-in request [:headers "content-type"])
+                allowable-types (or (not-empty content-types) #{:content/json})
+                content-length (try
+                                 (some-> (get-in request [:headers "content-length"])
+                                         parse-long)
+                                 (catch Exception _e nil))]
+            (cond
+              ;; explicit zero length don't care about content-type
+              (and content-length
+                   (zero? content-length)
+                   ;; trust but verify
+                   (or (nil? (:body request))
+                       (neg? (.read ^java.io.InputStream (:body request)))))
+              matched
+
+              ;; provided type matches
+              (and content-type
+                   (content-type-matches? content-type allowable-types))
+              matched
+
+              ;; no content length (ie, no body) don't care about content-type
+              (and (nil? content-length)
+                   (or (nil? (:body request))
+                       (neg? (.read ^java.io.InputStream (:body request)))))
+              matched
+
+              :else
+              (throw (ex-info (tru "Invalid content-type")
+                              {:provided content-type
+                               :available allowable-types
+                               :status-code 400})))))))))
+
+(defn make-route
+  "Create a route for our defendpoint. For non-POST methods, just returns the route. For POST methods, adds a second
+  check that the content type matches expected. By default this is \"application/json\", but can supply others in
+  metadata like :content/form for form data. It only adds this check if there are args in the args vector for the route that are not from the route.
+
+  Eg: route:       \"/:card-id/query/:export-format\"
+      args vector: [card-id export-format]
+  does not require a check of content type because its only args are from the route itself.
+
+      route:       \"/:card-id/query/:export-format\"
+      args vector: [card-id export-format :as {{:keys [parameters]} :params}]
+  does require a check because it pulls parameters from the request."
+  [route method content-types]
+  (if (#{"post" "put"} (str/lower-case (name method)))
+    (do
+      (when (seq content-types)
+        (run! (fn [content-type]
+                (or (content-type->regex content-type)
+                    (throw (ex-info (trs "Unrecognized content type: {0}\n Valid: {1}"
+                                         content-type
+                                         (keys content-type->regex))
+                                    {}))))
+              content-types))
+      `(matching-route ~route ~content-types))
+    route))
+
 (defmacro defendpoint*
   "Impl macro for [[defendpoint]]; don't use this directly."
   [{:keys [method route fn-name docstr args body]}]
@@ -245,7 +334,11 @@
                     assoc
                     :doc          docstr
                     :is-endpoint? true)
-     (~(symbol "compojure.core" (name method)) ~route ~args
+     (~(symbol "compojure.core" (name method))
+      ~(make-route route
+                   (str/lower-case (name method))
+                   (:content-types (meta method)))
+      ~args
       ~@body)))
 
 ;; TODO - several of the things `defendpoint` does could and should just be done by custom Ring middleware instead
