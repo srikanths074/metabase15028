@@ -15,6 +15,7 @@
    [metabase.models.persisted-info :as persisted-info]
    [metabase.models.query :as query]
    [metabase.models.table :refer [Table]]
+   [metabase.pulse.render :as render]
    [metabase.query-processor :as qp]
    [metabase.query-processor.middleware.constraints :as qp.constraints]
    [metabase.query-processor.middleware.permissions :as qp.perms]
@@ -27,6 +28,7 @@
    [metabase.util.log :as log]
    [metabase.util.malli.schema :as ms]
    [metabase.util.schema :as su]
+   [ring.util.response :as response]
    [schema.core :as s]
    [toucan.db :as db]))
 
@@ -82,9 +84,12 @@
 
 ;;; ----------------------------------- Downloading Query Results in Other Formats -----------------------------------
 
+(def ^:private export-format-list
+  (conj (map u/qualified-name (qp.streaming/export-formats)) "png"))
+
 (def ExportFormat
   "Schema for valid export formats for downloading query results."
-  (apply s/enum (map u/qualified-name (qp.streaming/export-formats))))
+  (apply s/enum export-format-list))
 
 (s/defn export-format->context :- mbql.s/Context
   "Return the `:context` that should be used when saving a QueryExecution triggered by a request to download results
@@ -97,9 +102,8 @@
 (def export-format-regex
   "Regex for matching valid export formats (e.g., `json`) for queries.
    Inteneded for use in an endpoint definition:
-
      (api/defendpoint-schema POST [\"/:export-format\", :export-format export-format-regex]"
-  (re-pattern (str "(" (str/join "|" (map u/qualified-name (qp.streaming/export-formats))) ")")))
+  (re-pattern (str "(" (str/join "|" export-format-list) ")")))
 
 (def ^:private column-ref-regex #"^\[.+\]$")
 
@@ -111,14 +115,45 @@
      json-key
      (keyword json-key)))
 
+(defn image-response
+  "Returns a Ring response to serve a static-viz image download."
+  [byte-array]
+  (-> (response/response byte-array)
+      (#'response/content-length (count byte-array))))
+
+(defn- render-query
+  "Render the query to png as if it were an existing card."
+  [dataset-query card]
+  (let [query-results (qp/process-query-and-save-execution!
+                       (-> dataset-query
+                           (assoc :async? false)
+                           (assoc :middleware {:process-viz-settings?  true
+                                               :skip-results-metadata? true
+                                               :ignore-cached-results? true
+                                               :format-rows?           false
+                                               :js-int-to-string?      false}))
+                       {:executed-by api/*current-user-id*
+                        :context     (export-format->context "png")})
+        png-bytes     (render/render-pulse-card-to-png
+                       (-> query-results :data :results_timezone)
+                       card
+                       (assoc-in query-results [:data :viz-settings] {}) ;; not totally sure what goes wrong when you DO pass viz-settings
+                       1000)]
+    (-> png-bytes
+        image-response
+        (response/header "Content-Disposition" "attachment; filename=\"unsaved-card.png\""))))
+
 #_{:clj-kondo/ignore [:deprecated-var]}
 (api/defendpoint-schema ^:streaming POST ["/:export-format", :export-format export-format-regex]
   "Execute a query and download the result data as a file in the specified format."
-  [export-format :as {{:keys [query visualization_settings] :or {visualization_settings "{}"}} :params}]
+  [export-format :as {{:keys [query visualization_settings card] :or {visualization_settings "{}"}} :params}]
   {query                  su/JSONString
    visualization_settings su/JSONString
-   export-format          ExportFormat}
+   export-format          ExportFormat
+   card                   su/JSONString}
   (let [query        (json/parse-string query keyword)
+        card         (-> (json/parse-string card keyword)
+                         (update :display keyword))
         viz-settings (-> (json/parse-string visualization_settings viz-setting-key-fn)
                          (update-in [:table.columns] mbql.normalize/normalize)
                          mb.viz/db->norm)
@@ -131,11 +166,13 @@
                                                   (assoc :process-viz-settings? true
                                                          :skip-results-metadata? true
                                                          :format-rows? false))))]
-    (run-query-async
-     query
-     :export-format export-format
-     :context       (export-format->context export-format)
-     :qp-runner     qp/process-query-and-save-execution!)))
+    (case export-format
+      "png" (render-query query card)
+      (run-query-async
+       query
+       :export-format export-format
+       :context       (export-format->context export-format)
+       :qp-runner     qp/process-query-and-save-execution!))))
 
 
 ;;; ------------------------------------------------ Other Endpoints -------------------------------------------------

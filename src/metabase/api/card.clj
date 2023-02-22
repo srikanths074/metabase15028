@@ -38,6 +38,8 @@
    [metabase.models.query.permissions :as query-perms]
    [metabase.models.revision.last-edit :as last-edit]
    [metabase.models.timeline :as timeline]
+   [metabase.pulse.render :as render]
+   [metabase.query-processor :as qp]
    [metabase.query-processor.async :as qp.async]
    [metabase.query-processor.card :as qp.card]
    [metabase.query-processor.pivot :as qp.pivot]
@@ -52,6 +54,7 @@
    [metabase.util.malli :as mu]
    [metabase.util.malli.schema :as ms]
    [metabase.util.schema :as su]
+   [ring.util.response :as response]
    [schema.core :as s]
    [toucan.db :as db]
    [toucan.hydrate :refer [hydrate]]
@@ -774,6 +777,32 @@ saved later when it is ready."
    :context      (if collection_preview :collection :question)
    :middleware   {:process-viz-settings? false}))
 
+(defn image-response
+  "Returns a Ring response to serve a static-viz image download."
+  [byte-array]
+  (-> (response/response byte-array)
+      (#'response/content-length (count byte-array))))
+
+(defn- render-card
+  "WIP"
+  [card-id]
+  (let [{:keys [dataset_query] :as card} (db/select-one Card :id card-id)
+        query-results                    (qp/process-query-and-save-execution!
+                                          (-> dataset_query
+                                              (assoc :async? false)
+                                              (assoc-in [:middleware :process-viz-settings?] true))
+                                          {:executed-by api/*current-user-id*
+                                           :context     :pulse
+                                           :card-id     card-id})
+        png-bytes                        (render/render-pulse-card-to-png
+                                          (-> query-results :data :results_timezone)
+                                          card
+                                          query-results
+                                          1000)]
+    (-> png-bytes
+        image-response
+        (response/header "Content-Disposition" (format "attachment; filename=\"card-%d.png\"" card-id)))))
+
 #_{:clj-kondo/ignore [:deprecated-var]}
 (api/defendpoint-schema ^:streaming POST "/:card-id/query/:export-format"
   "Run the query associated with a Card, and return its results as a file in the specified format.
@@ -783,16 +812,18 @@ saved later when it is ready."
   [card-id export-format :as {{:keys [parameters]} :params}]
   {parameters    (s/maybe su/JSONString)
    export-format api.dataset/ExportFormat}
-  (qp.card/run-query-for-card-async
-   card-id export-format
-   :parameters  (json/parse-string parameters keyword)
-   :constraints nil
-   :context     (api.dataset/export-format->context export-format)
-   :middleware  {:process-viz-settings?  true
-                 :skip-results-metadata? true
-                 :ignore-cached-results? true
-                 :format-rows?           false
-                 :js-int-to-string?      false}))
+  (case export-format
+    "png" (render-card card-id)
+    (qp.card/run-query-for-card-async
+     card-id export-format
+     :parameters  (json/parse-string parameters keyword)
+     :constraints nil
+     :context     (api.dataset/export-format->context export-format)
+     :middleware  {:process-viz-settings?  true
+                   :skip-results-metadata? true
+                   :ignore-cached-results? true
+                   :format-rows?           false
+                   :js-int-to-string?      false})))
 
 ;;; ----------------------------------------------- Sharing is Caring ------------------------------------------------
 
