@@ -1,7 +1,7 @@
 (ns metabase.lib.core
   "Currently this is mostly a convenience namespace for REPL and test usage. We'll probably have a slightly different
   version of this for namespace for QB and QP usage in the future -- TBD."
-  (:refer-clojure :exclude [remove replace =])
+  (:refer-clojure :exclude [remove replace and or not = < <= > >= not-empty case])
   (:require
    [metabase.lib.dev :as lib.dev]
    [metabase.lib.filter :as lib.filter]
@@ -23,7 +23,21 @@
   field
   query-for-table-name]
  [lib.filter
-  =]
+  and
+  or
+  not
+  = !=
+  < <=
+  > >=
+  between
+  inside
+  is-null not-null
+  is-empty not-empty
+  starts-with ends-with
+  contains does-not-contain
+  time-interval
+  segment
+  case]
  [lib.join
   join
   join-clause
