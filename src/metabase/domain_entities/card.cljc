@@ -6,7 +6,6 @@
    [metabase.util.malli :as mu]
    #?@(:cljs ([metabase.domain-entities.converters :as converters]
               [metabase.lib.query :as lib.query]
-              [metabase.lib.schema.id :as lib.schema.id]
               [metabase.lib.util :as lib.util]))))
 
 ;;; ---------------------------------- Schemas for legacy MBQL -----------------------------------
@@ -28,16 +27,16 @@
    (def ^:private LegacyLocalFieldReference
      [:tuple
       [:= "field"]
-      ::lib.schema.id/field
+      :metabase.lib.schema.id/field
       [:maybe [:map-of string? :any]]]))
 
 #?(:cljs
    (def ^:private LegacyForeignFieldReference
      [:tuple
       [:= "field"]
-      ::lib.schema.id/field
+      :metabase.lib.schema.id/field
       [:map
-       [:source-field {:js/prop "source-field"} [:or ::lib.schema.id/field string?]]]]))
+       [:source-field {:js/prop "source-field"} [:or :metabase.lib.schema.id/field string?]]]]))
 
 #?(:cljs
    (def ^:private LegacyFieldReference
@@ -61,7 +60,7 @@
    (def ^:private LegacyDatasetQuery
      [:map
       [:type [:enum :native :query]]
-      [:database {:optional true} ::lib.schema.id/database]
+      [:database {:optional true} :metabase.lib.schema.id/database]
       [:native {:optional true} LegacyNativeQuery]
       [:query {:optional true} LegacyStructuredQuery]
       [:parameters {:optional true} [:sequential :any]]]))
