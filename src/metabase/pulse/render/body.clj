@@ -904,27 +904,21 @@
              :src   (:image-src image-bundle)}]]}))
 
 (s/defmethod render :funnel :- common/RenderedPulseCard
-  [_ render-type _timezone-id card dashcard {:keys [rows cols viz-settings] :as data}]
-  (let [viz-settings   (merge viz-settings (:visualization_settings dashcard))
-        [x-axis-rowfn
-         y-axis-rowfn] (common/graphing-column-row-fns card data)
-        rows           (map (juxt x-axis-rowfn y-axis-rowfn)
-                            (common/row-preprocess x-axis-rowfn y-axis-rowfn rows))
-        [x-col y-col]  cols
-        settings       (as-> (->js-viz x-col y-col viz-settings) jsviz-settings
-                         (assoc jsviz-settings :step    {:name   (:display_name x-col)
-                                                         :format (:x jsviz-settings)}
-                                :measure {:format (:y jsviz-settings)}))
-        svg            (js-svg/funnel rows settings)
-        image-bundle   (image-bundle/make-image-bundle render-type svg)]
+  [_ render-type _timezone-id card _dashcard {:keys [rows cols] :as _data}]
+  (let [viz-settings (get-in card [:visualization_settings])
+        data {:rows rows
+              :cols cols}
+        image-bundle   (image-bundle/make-image-bundle
+                        render-type
+                        (js-svg/funnel viz-settings data))]
     {:attachments
-     (image-bundle/image-bundle->attachment image-bundle)
+     (when image-bundle
+       (image-bundle/image-bundle->attachment image-bundle))
 
      :content
      [:div
       [:img {:style (style/style {:display :block :width :100%})
              :src   (:image-src image-bundle)}]]}))
-
 
 (s/defmethod render :empty :- common/RenderedPulseCard
   [_ render-type _ _ _ _]
