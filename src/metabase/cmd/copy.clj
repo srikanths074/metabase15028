@@ -9,7 +9,7 @@
    [metabase.db.setup :as mdb.setup]
    [metabase.models
     :refer [Action
-            Activity
+            ActivityLog
             ApplicationPermissionsRevision
             BookmarkOrdering
             Card
@@ -109,7 +109,7 @@
    BookmarkOrdering
    DashboardCard
    DashboardCardSeries
-   Activity
+   ActivityLog
    Pulse
    PulseCard
    PulseChannel

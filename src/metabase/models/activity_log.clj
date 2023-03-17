@@ -1,4 +1,4 @@
-(ns metabase.models.activity
+(ns metabase.models.activity-log
   (:require
    [metabase.api.common :as api]
    [metabase.events :as events]
@@ -45,7 +45,7 @@
 
 ;;; ----------------------------------------------- Entity & Lifecycle -----------------------------------------------
 
-(models/defmodel Activity :activity)
+(models/defmodel ActivityLog :activity_log)
 
 (defn- pre-insert [activity]
   (let [defaults {:timestamp :%now
@@ -53,15 +53,15 @@
     (merge defaults activity)))
 
 (mi/define-methods
- Activity
+ ActivityLog
  {:types      (constantly {:details :json, :topic :keyword})
   :pre-insert pre-insert})
 
-(defmethod mi/can-read? Activity
+(defmethod mi/can-read? ActivityLog
   [& args]
   (apply can-? mi/can-read? args))
 
-(defmethod mi/can-write? Activity
+(defmethod mi/can-write? ActivityLog
   [& args]
   (apply can-? mi/can-write? args))
 
@@ -76,7 +76,7 @@
 ;; user error.
 
 (defn record-activity!
-  "Inserts a new `Activity` entry.
+  "Inserts a new `ActivityLog` entry.
 
    Takes the following kwargs:
      :topic          Required.  The activity topic.
@@ -98,14 +98,13 @@
   [& {:keys [topic object details-fn database-id table-id user-id model model-id]}]
   {:pre [(keyword? topic)]}
   (let [object (or object {})]
-    (db/insert! Activity
+    (db/insert! ActivityLog
       :topic       topic
       :user_id     (or user-id (events/object->user-id object))
       :model       (or model (events/topic->model topic))
       :model_id    (or model-id (events/object->model-id topic object))
       :database_id database-id
       :table_id    table-id
-      :custom_id   (:custom_id object)
       :details     (if (fn? details-fn)
                      (details-fn object)
                      object))))

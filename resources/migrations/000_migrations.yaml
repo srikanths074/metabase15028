@@ -13965,6 +13965,116 @@ databaseChangeLog:
                     unique: true
 
   - changeSet:
+      id: v46.00-046
+      author: adam-james
+      comment: added 0.46.0 -- activity_log added to consolidate events in one place for auditing
+      changes:
+        - createTable:
+            remarks: "Table for all events for auditing."
+            tableName: activity_log
+            columns:
+              - column:
+                  name: id
+                  type: int
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: topic
+                  remarks: "Keyword representing what the activity is."
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: timestamp
+                  remarks: "Timestamp of when the activity is logged."
+                  type: ${timestamp_type}
+                  constraints:
+                    nullable: false
+              - column:
+                  name: end_timestamp
+                  remarks: "Timestamp of when an activity is completed. Eg. query execution succeeds."
+                  type: ${timestamp_type}
+                  constraints:
+                    nullable: true
+              - column:
+                  name: user_id
+                  remarks: "ID of the user responsible for the activity."
+                  type: int
+                  constraints:
+                    nullable: true
+              - column:
+                  name: model
+                  remarks: "Name of the model representing the activity."
+                  type: varchar(16)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: model_id
+                  remarks: "ID of the model representing the activity."
+                  type: int
+                  constraints:
+                    nullable: true
+              - column:
+                  name: database_id
+                  remarks: "ID of the database related to the activity."
+                  type: int
+                  constraints:
+                    nullable: true
+              - column:
+                  name: table_id
+                  remarks: "ID of the table related to the activity."
+                  type: int
+                  constraints:
+                    nullable: true
+              - column:
+                  name: details
+                  remarks: "JSON storing additional details relevant to the event."
+                  type: ${text.type}
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: v46.00-047
+      author:  adam-james
+      comment: Added 0.46.0 -- index activity_log.user_id
+      changes:
+        - createIndex:
+            remarks: "Index on user_id as it will be common to query activities from a user."
+            tableName: activity_log
+            indexName: idx_activity_log_user_id
+            columns:
+              column:
+                name: user_id
+
+  - changeSet:
+      id: v46.00-048
+      author:  adam-james
+      comment: Added 0.46.0 -- index activity_log.timestamp
+      changes:
+        - createIndex:
+            remarks: "Index on timestamp as it may be common to query when events occurred."
+            tableName: activity_log
+            indexName: idx_activity_log_timestamp
+            columns:
+              column:
+                name: timestamp
+
+  - changeSet:
+      id: v46.00-049
+      author:  adam-james
+      comment: Added 0.46.0 -- FK constraint on activity_log.user_id
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: activity_log
+            baseColumnNames: user_id
+            referencedTableName: core_user
+            referencedColumnNames: id
+            constraintName: fk_activity_log_ref_user_id
+            onDelete: CASCADE
+
+  - changeSet:
       id: v46.00-051
       author: calherries
       comment: Added 0.46.0 -- drop defaults for dashcard's position and size
@@ -14183,6 +14293,36 @@ databaseChangeLog:
             DELETE FROM sandboxes
             WHERE permission_id IS NULL;
       rollback: # not required, orphaned sandboxes should not be re-added to the DB
+
+  - changeSet:
+      id: v46.00-068
+      author: adam-james
+      comment: Added 0.46.0 - Copy activity -> activity_log (most recent 30 days)
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO activity_log (table_id, database_id, topic, details, model_id, user_id, timestamp, model)
+              SELECT table_id, database_id, topic, details, model_id, user_id, timestamp, model
+              FROM activity WHERE timestamp > now() - INTERVAL '30' day
+              ORDER BY timestamp ASC;
+      rollback: # we don't care to preserve activity_log from 46 -> 45
+
+  - changeSet:
+      id: v46.00-069
+      author: adam-james
+      comment: Added 0.46.0 - Copy view_log -> activity_log (most recent 30 days)
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO activity_log (table_id, database_id, topic, details, model_id, user_id, timestamp, model)
+              SELECT NULL AS table_id,
+                     NULL AS database_id,
+                     CONCAT(model, '-view') AS topic,
+                     metadata AS details,
+                     model_id, user_id, timestamp, model
+              FROM view_log WHERE timestamp > now() - INTERVAL '30' day
+              ORDER BY timestamp ASC;
+      rollback: # we don't care to preserve activity_log from 46 -> 45
 
   - changeSet:
       id: v46.00-070

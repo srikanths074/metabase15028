@@ -1,9 +1,9 @@
-(ns metabase.api.activity-test
-  "Tests for /api/activity endpoints."
+(ns metabase.api.activity-log-test
+  "Tests for /api/activity_log endpoints."
   (:require
    [clojure.test :refer :all]
    [java-time :as t]
-   [metabase.api.activity :as api.activity]
+   [metabase.api.activity-log :as api.activity-log]
    [metabase.models.activity-log :refer [ActivityLog]]
    [metabase.models.card :refer [Card]]
    [metabase.models.dashboard :refer [Dashboard]]
@@ -16,8 +16,6 @@
    [metabase.test.fixtures :as fixtures]
    [metabase.util :as u]
    [toucan.db :as db]))
-
-(set! *warn-on-reflection* true)
 
 (use-fixtures :once (fixtures/initialize :db))
 
@@ -44,22 +42,22 @@
 
 ;; NOTE: timestamp matching was being a real PITA so I cheated a bit.  ideally we'd fix that
 (deftest activity-list-test
-  (testing "GET /api/activity"
+  (testing "GET /api/activity-log"
     (mt/with-temp* [ActivityLog [activity1 {:topic     "install"
-                                         :details   {}
-                                         :timestamp #t "2015-09-09T12:13:14.888Z[UTC]"}]
+                                            :details   {}
+                                            :timestamp #t "2015-09-09T12:13:14.888Z[UTC]"}]
                     ActivityLog [activity2 {:topic     "dashboard-create"
-                                         :user_id   (mt/user->id :crowberto)
-                                         :model     "dashboard"
-                                         :model_id  1234
-                                         :details   {:description "Because I can!"
-                                                     :name        "Bwahahaha"}
-                                         :timestamp #t "2015-09-10T18:53:01.632Z[UTC]"}]
+                                            :user_id   (mt/user->id :crowberto)
+                                            :model     "dashboard"
+                                            :model_id  1234
+                                            :details   {:description "Because I can!"
+                                                        :name        "Bwahahaha"}
+                                            :timestamp #t "2015-09-10T18:53:01.632Z[UTC]"}]
                     ActivityLog [activity3 {:topic     "user-joined"
-                                         :user_id   (mt/user->id :rasta)
-                                         :model     "user"
-                                         :details   {}
-                                         :timestamp #t "2015-09-10T05:33:43.641Z[UTC]"}]]
+                                            :user_id   (mt/user->id :rasta)
+                                            :model     "user"
+                                            :details   {}
+                                            :timestamp #t "2015-09-10T05:33:43.641Z[UTC]"}]]
       (letfn [(fetch-activity [activity]
                 (merge
                  activity-defaults
@@ -79,7 +77,7 @@
                   :user    nil})]
                ;; remove other activities from the API response just in case -- we're not interested in those
                (let [these-activity-ids (set (map u/the-id [activity1 activity2 activity3]))]
-                 (for [activity (mt/user-http-request :crowberto :get 200 "activity")
+                 (for [activity (mt/user-http-request :crowberto :get 200 "activity-log")
                        :when    (contains? these-activity-ids (u/the-id activity))]
                    (dissoc activity :timestamp)))))))))
 
@@ -143,7 +141,7 @@
                       [(mt/user->id :crowberto) "card"      (:id archived)]
                       [(mt/user->id :crowberto) "table"     (:id hidden-table)]
                       [(mt/user->id :rasta)     "card"      (:id card1)]])
-      (let [recent-views (mt/user-http-request :crowberto :get 200 "activity/recent_views")]
+      (let [recent-views (mt/user-http-request :crowberto :get 200 "activity-log/recent_views")]
         (is (partial= [{:model "table"     :model_id (:id table1)}
                        {:model "dashboard" :model_id (:id dash)}
                        {:model "card"      :model_id (:id card1)}
@@ -183,7 +181,7 @@
         (is (= [["dashboard" (:id dash1)]
                 ["card" (:id card1)]]
                ;; all views are from :rasta, but :crowberto can still see popular items
-               (for [popular-item (mt/user-http-request :crowberto :get 200 "activity/popular_items")]
+               (for [popular-item (mt/user-http-request :crowberto :get 200 "activity-log/popular_items")]
                  ((juxt :model :model_id) popular-item))))))
     (testing "Items viewed by other users can still show up in popular items."
       (mt/with-model-cleanup [ViewLog QueryExecution]
@@ -196,7 +194,7 @@
                 ["dataset" (:id dataset)]
                 ["table" (:id table1)]]
                ;; all views are from :rasta, but :crowberto can still see popular items
-               (for [popular-item (mt/user-http-request :crowberto :get 200 "activity/popular_items")]
+               (for [popular-item (mt/user-http-request :crowberto :get 200 "activity-log/popular_items")]
                  ((juxt :model :model_id) popular-item))))))
     (testing "Items with more views show up sooner in popular items."
       (mt/with-model-cleanup [ViewLog QueryExecution]
@@ -213,7 +211,7 @@
                        {:model "dataset"   :model_id (:id dataset)}
                        {:model "table"     :model_id (:id table1)}]
                       ;; all views are from :rasta, but :crowberto can still see popular items
-                      (mt/user-http-request :crowberto :get 200 "activity/popular_items")))))))
+                      (mt/user-http-request :crowberto :get 200 "activity-log/popular_items")))))))
 
 ;;; activities->referenced-objects, referenced-objects->existing-objects, add-model-exists-info
 
@@ -236,12 +234,12 @@
   (is (= {"dashboard" #{41 43 42}
           "card"      #{113 108 109 111 112 114}
           "user"      #{90}}
-         (#'api.activity/activities->referenced-objects fake-activities))))
+         (#'api.activity-log/activities->referenced-objects fake-activities))))
 
 (deftest referenced-objects->existing-objects-test
   (mt/with-temp Dashboard [{dashboard-id :id}]
     (is (= {"dashboard" #{dashboard-id}}
-           (#'api.activity/referenced-objects->existing-objects {"dashboard" #{dashboard-id 0}
+           (#'api.activity-log/referenced-objects->existing-objects {"dashboard" #{dashboard-id 0}
                                                                  "card"      #{0}})))))
 (deftest add-model-exists-info-test
   (mt/with-temp* [Dashboard [{dashboard-id :id}]
@@ -257,7 +255,7 @@
              :details      {:dashcards [{:card_id card-id, :exists true}
                                         {:card_id 0, :exists false}
                                         {:card_id dataset-id, :exists true}]}}]
-           (#'api.activity/add-model-exists-info [{:model "dashboard", :model_id dashboard-id}
+           (#'api.activity-log/add-model-exists-info [{:model "dashboard", :model_id dashboard-id}
                                                   {:model "card", :model_id 0}
                                                   {:model "card", :model_id dataset-id}
                                                   {:model    "dashboard"
@@ -269,11 +267,11 @@
 
 (deftest activity-visibility-test
   (mt/with-temp ActivityLog [activity {:topic     "user-joined"
-                                    :details   {}
-                                    :timestamp (java.time.ZonedDateTime/now)}]
+                                       :details   {}
+                                       :timestamp (java.time.ZonedDateTime/now)}]
     (letfn [(activity-topics [user]
               (into #{} (map :topic)
-                    (mt/user-http-request user :get 200 "activity")))]
+                    (mt/user-http-request user :get 200 "activity-log")))]
       (testing "Only admins should get to see user-joined activities"
         (testing "admin should see `:user-joined` activities"
           (testing "Sanity check: admin should be able to read the activity"
