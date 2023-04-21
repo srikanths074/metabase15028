@@ -58,6 +58,7 @@ import {
   getParameterValuesBySlug,
   normalizeParameters,
 } from "metabase-lib/parameters/utils/parameter-values";
+import { normalize } from "metabase-lib/queries/utils/normalize";
 import {
   getTemplateTagParametersFromCard,
   remapParameterValuesToTemplateTags,
@@ -134,6 +135,13 @@ class QuestionInner {
     parameterValues?: ParameterValues,
   ) {
     this._card = card;
+    if (this._card?.dataset_query) {
+      this._card = {
+        ...this._card,
+        dataset_query: normalize(card.dataset_query),
+      };
+      console.log(this._card.dataset_query);
+    }
     this._metadata =
       metadata ||
       new Metadata({
@@ -164,9 +172,7 @@ class QuestionInner {
   }
 
   setCard(card: CardObject): Question {
-    const q = this.clone();
-    q._card = card;
-    return q;
+    return new Question(card, this._metadata, this._parameterValues);
   }
 
   withoutNameAndId() {

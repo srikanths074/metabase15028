@@ -717,7 +717,7 @@ describe("QB Actions > initializeQB", () => {
       const query = question.query() as StructuredQuery;
 
       expect(result.card).toEqual(expectedCard);
-      expect(query.sourceTableId()).toBe(null);
+      expect(query.sourceTableId()).toBeUndefined();
       expect(result.originalCard).toBeUndefined();
     });
 

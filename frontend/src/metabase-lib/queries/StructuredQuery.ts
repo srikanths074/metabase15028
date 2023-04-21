@@ -125,7 +125,7 @@ class StructuredQueryInner extends AtomicQuery {
     datasetQuery: DatasetQuery = STRUCTURED_QUERY_TEMPLATE,
   ) {
     super(question, datasetQuery);
-    this._structuredDatasetQuery = datasetQuery as StructuredDatasetQuery;
+    this._structuredDatasetQuery = this._datasetQuery as StructuredDatasetQuery;
   }
 
   private getMLv2Query(): Query {
@@ -1165,7 +1165,7 @@ class StructuredQueryInner extends AtomicQuery {
   // FIELDS
   fields() {
     // FIMXE: implement field functions in query lib
-    return this.query().fields || [];
+    return this.query()?.fields || [];
   }
 
   addField(name, expression) {
