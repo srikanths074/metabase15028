@@ -13,6 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test-run-id:
+    runs-on: ubuntu-latest
+    outputs:
+      testRunId: ${{ steps.testRunId.outputs.testRunId }}
+    steps:
+      - id: testRunId
+        run: echo testRunId=$(npx uuid) >> "$GITHUB_OUTPUT"
   files-changed:
     name: Check which files changed
     runs-on: ubuntu-22.04
@@ -55,7 +62,7 @@ jobs:
         uses: ./.github/actions/prepare-uberjar-artifact
 
   e2e-tests:
-    needs: [build, files-changed]
+    needs: [build, files-changed, test-run-id]
     if: |
       always() &&
       needs.files-changed.outputs.e2e_all == 'true' &&
@@ -155,6 +162,8 @@ jobs:
         uses: ./.github/actions/prepare-cypress
       - name: Run Snowplow micro
         uses: ./.github/actions/run-snowplow-micro
+      - name: Install Replay.io browser
+        run: npx @replayio/cypress install
 
       - uses: actions/download-artifact@v3
         name: Retrieve uberjar artifact for ${{ matrix.edition }}
@@ -182,6 +191,16 @@ jobs:
           --folder ${{ matrix.folder }}
         env:
           TERM: xterm
+          RECORD_REPLAY_METADATA_FILE: /tmp/replay-metadata.json
+          RECORD_REPLAY_METADATA_TEST_RUN_ID: ${{ needs.test-run-id.outputs.testRunId }}
+          RECORD_REPLAY_DISABLE_ASSERTS: 1
+
+      - name: Upload Replay.io recordings
+        if: always()
+        uses: replayio/action-upload@v0.4.7
+        with:
+          api-key: rwk_gXbvYctIcR6RZyEzUvby3gtkO4esrB2L321lkY8FSuQ
+          public: true
 
       - name: Upload Cypress Artifacts upon failure
         uses: actions/upload-artifact@v3
