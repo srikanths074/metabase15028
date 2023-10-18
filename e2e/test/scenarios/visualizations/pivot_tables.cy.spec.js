@@ -932,7 +932,7 @@ describe("scenarios > visualizations > pivot tables", () => {
 
     cy.findByTestId("viz-settings-button").click();
     // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-    cy.findByText("Conditional Formatting").click();
+    cy.findByText("Conditional formatting").click();
 
     // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
     cy.findByText("Add a rule").click();
