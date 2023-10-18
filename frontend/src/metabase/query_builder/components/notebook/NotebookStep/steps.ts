@@ -1,9 +1,9 @@
-import * as React from "react";
+import type * as React from "react";
 import { t } from "ttag";
 
 import { color } from "metabase/lib/colors";
 
-import { IconName } from "metabase/core/components/Icon";
+import type { IconName } from "metabase/core/components/Icon";
 import { DataStep } from "../steps/DataStep";
 import { JoinStep } from "../steps/JoinStep";
 import ExpressionStep from "../steps/ExpressionStep";
@@ -14,7 +14,7 @@ import SummarizeStep from "../steps/SummarizeStep";
 import SortStep from "../steps/SortStep";
 import LimitStep from "../steps/LimitStep";
 
-import { NotebookStepUiComponentProps } from "../types";
+import type { NotebookStepUiComponentProps } from "../types";
 
 export type StepUIItem = {
   title: string;
@@ -37,12 +37,7 @@ export const STEP_UI: Record<string, StepUIItem> = {
     icon: "join_left_outer",
     priority: 1,
     getColor: () => color("brand"),
-
-    // JoinStep's props actually satisfy the NotebookStepUiComponentProps type,
-    // but there are differences like PropTypes.string and NotebookStepType,
-    // that make it 'technically' incompatible.
-    // Should be removed once the JoinStep is converted to TypeScript.
-    component: JoinStep as React.ComponentType<NotebookStepUiComponentProps>,
+    component: JoinStep,
   },
   expression: {
     title: t`Custom column`,

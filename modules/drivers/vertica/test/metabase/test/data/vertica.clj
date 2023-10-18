@@ -5,7 +5,7 @@
    [clojure.java.jdbc :as jdbc]
    [clojure.string :as str]
    [clojure.test :refer :all]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
@@ -168,11 +168,13 @@
 (defmethod load-data/load-data! :vertica
   [driver dbdef {:keys [rows], :as tabledef}]
   (try
-    (mt/with-temp-file [filename "vertica-rows.csv"]
+    (mt/with-temp-file [filename]
       (dump-table-rows-to-csv! tabledef filename)
       (load-rows-from-csv! driver dbdef tabledef filename))
     (catch Throwable e
-      (throw (ex-info "Error loading rows" {:rows (take 10 rows)} e)))))
+      (throw (ex-info (format "Error loading rows: %s" (ex-message e))
+                      {:rows (take 10 rows)}
+                      e)))))
 
 (defmethod sql.tx/pk-sql-type :vertica [& _] "INTEGER")
 

@@ -1,9 +1,9 @@
-import * as React from "react";
+import type * as React from "react";
 import userEvent from "@testing-library/user-event";
 import {
   renderWithProviders,
   screen,
-  waitForElementToBeRemoved,
+  waitForLoaderToBeRemoved,
   within,
 } from "__support__/ui";
 
@@ -26,7 +26,7 @@ import {
   createMockImplicitCUDActions,
 } from "metabase-types/api/mocks";
 
-import { WritebackParameter } from "metabase-types/api";
+import type { WritebackParameter } from "metabase-types/api";
 import { ConnectedActionDashcardSettings } from "./ActionDashcardSettings";
 
 const dashboardParameter = createMockParameter({
@@ -470,7 +470,7 @@ describe("ActionViz > ActionDashcardSettings", () => {
       dashcard: actionDashcardWithAction,
     });
 
-    await waitForElementToBeRemoved(() => screen.queryByText("Loading..."));
+    await waitForLoaderToBeRemoved();
 
     const queryAction = screen.getByTestId(`action-item-${actions2[0].name}`);
     const implicitAction = screen.getByTestId(

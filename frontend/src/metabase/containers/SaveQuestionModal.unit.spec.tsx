@@ -10,9 +10,10 @@ import {
 } from "__support__/ui";
 import { setupEnterpriseTest } from "__support__/enterprise";
 import { mockSettings } from "__support__/settings";
+import type { CollectionEndpoints } from "__support__/server-mocks";
 import {
-  CollectionEndpoints,
   setupCollectionsEndpoints,
+  setupCollectionByIdEndpoint,
 } from "__support__/server-mocks";
 import {
   createMockQueryBuilderState,
@@ -22,7 +23,7 @@ import {
 import { SaveQuestionModal } from "metabase/containers/SaveQuestionModal";
 import { openCollection } from "metabase/containers/ItemPicker/test-utils";
 import { ROOT_COLLECTION } from "metabase/entities/collections";
-import { CollectionId } from "metabase-types/api";
+import type { CollectionId } from "metabase-types/api";
 import { createMockCollection } from "metabase-types/api/mocks";
 import {
   createSampleDatabase,
@@ -30,35 +31,31 @@ import {
   ORDERS_ID,
   ORDERS,
 } from "metabase-types/api/mocks/presets";
-import StructuredQuery from "metabase-lib/queries/StructuredQuery";
+import type StructuredQuery from "metabase-lib/queries/StructuredQuery";
 import Question from "metabase-lib/Question";
 
 const metadata = createMockMetadata({
   databases: [createSampleDatabase()],
 });
 
-const TEST_COLLECTIONS = [
-  {
-    can_write: false,
-    effective_ancestors: [],
-    effective_location: null,
-    id: "root",
-    name: "Our analytics",
-    parent_id: null,
-  },
-  {
-    archived: false,
-    can_write: true,
-    color: "#31698A",
-    description: null,
-    id: 1,
-    location: "/",
-    name: "Bobby Tables's Personal Collection",
-    namespace: null,
-    personal_owner_id: 100,
-    slug: "bobby_tables_s_personal_collection",
-  },
-];
+const BOBBY_TEST_COLLECTION = createMockCollection({
+  archived: false,
+  can_write: true,
+  description: null,
+  id: 1,
+  location: "/",
+  name: "Bobby Tables's Personal Collection",
+  personal_owner_id: 100,
+});
+
+const ROOT_TEST_COLLECTION = createMockCollection({
+  ...ROOT_COLLECTION,
+  can_write: false,
+  effective_ancestors: [],
+  id: "root",
+});
+
+const TEST_COLLECTIONS = [ROOT_TEST_COLLECTION, BOBBY_TEST_COLLECTION];
 
 const setup = async (
   question: Question,
@@ -79,7 +76,8 @@ const setup = async (
     setupCollectionsEndpoints(collectionEndpoints);
   } else {
     fetchMock.get("path:/api/collection", TEST_COLLECTIONS);
-    fetchMock.get("path:/api/collection/root", TEST_COLLECTIONS);
+    fetchMock.get("path:/api/collection/root", ROOT_TEST_COLLECTION);
+    setupCollectionByIdEndpoint({ collections: [BOBBY_TEST_COLLECTION] });
   }
 
   const settings = mockSettings({ "enable-query-caching": isCachingEnabled });
@@ -666,7 +664,6 @@ describe("SaveQuestionModal", () => {
   });
 
   describe("new collection modal", () => {
-    const nameField = () => screen.getByRole("textbox", { name: /name/i });
     const collDropdown = () => screen.getByTestId("select-button");
     const newCollBtn = () =>
       screen.getByRole("button", {
@@ -683,16 +680,10 @@ describe("SaveQuestionModal", () => {
       userEvent.click(collDropdown());
       await waitFor(() => expect(newCollBtn()).toBeInTheDocument());
     });
-    it("should not be accessible if the dashboard form is invalid", async () => {
-      await setup(getQuestion());
-      userEvent.clear(nameField());
-      userEvent.click(collDropdown());
-      await waitFor(() => expect(newCollBtn()).toBeDisabled());
-    });
     it("should open new collection modal and return to dashboard modal when clicking close", async () => {
       await setup(getQuestion());
       userEvent.click(collDropdown());
-      await waitFor(() => expect(newCollBtn()).toBeEnabled());
+      await waitFor(() => expect(newCollBtn()).toBeInTheDocument());
       userEvent.click(newCollBtn());
       await waitFor(() => expect(collModalTitle()).toBeInTheDocument());
       userEvent.click(cancelBtn());
@@ -724,6 +715,7 @@ describe("SaveQuestionModal", () => {
             rootCollection: COLLECTION.ROOT,
           },
         });
+        setupCollectionByIdEndpoint({ collections: [COLLECTION.PARENT] });
       });
 
       it("should create collection inside nested folder", async () => {

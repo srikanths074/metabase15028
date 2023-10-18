@@ -1,29 +1,29 @@
 import * as ML from "cljs/metabase.lib.js";
 
 import type {
+  Bucket,
   CardMetadata,
   Clause,
   ColumnMetadata,
-  ExternalOp,
-  FilterClause,
-  FilterOperator,
   Join,
+  JoinCondition,
+  JoinConditionOperator,
+  JoinConditionParts,
   JoinStrategy,
   Query,
   TableMetadata,
 } from "./types";
+import { expressionParts } from "./expression";
+import { displayInfo, isColumnMetadata } from "./metadata";
 
 /**
  * Something you can join against -- either a raw Table, or a Card, which can be either a plain Saved Question or a
  * Model
  */
-type Joinable = TableMetadata | CardMetadata;
+export type Joinable = TableMetadata | CardMetadata;
 
 type JoinOrJoinable = Join | Joinable;
 
-/**
- * In this case, Clause is what you'd get back from the `args` you get when calling externalOp()
- */
 type ColumnMetadataOrFieldRef = ColumnMetadata | Clause;
 
 export function joins(query: Query, stageIndex: number): Join[] {
@@ -32,9 +32,20 @@ export function joins(query: Query, stageIndex: number): Join[] {
 
 export function joinClause(
   joinable: Joinable,
-  conditions: FilterClause[] | ExternalOp[],
+  conditions: JoinCondition[],
 ): Join {
   return ML.join_clause(joinable, conditions);
+}
+
+export function joinConditionClause(
+  query: Query,
+  stageIndex: number,
+  operator: JoinConditionOperator,
+  lhsColumn: ColumnMetadata,
+  rhsColumn: ColumnMetadata,
+): JoinCondition {
+  const operatorInfo = displayInfo(query, stageIndex, operator);
+  return ML.expression_clause(operatorInfo.shortName, [lhsColumn, rhsColumn]);
 }
 
 export function join(query: Query, stageIndex: number, join: Join): Query {
@@ -56,22 +67,64 @@ export function withJoinStrategy(join: Join, strategy: JoinStrategy): Join {
   return ML.with_join_strategy(join, strategy);
 }
 
-export function joinConditions(join: Join): FilterClause[] {
+export function joinConditions(join: Join): JoinCondition[] {
   return ML.join_conditions(join);
+}
+
+export function joinConditionParts(
+  query: Query,
+  stageIndex: number,
+  condition: JoinCondition,
+): JoinConditionParts {
+  const {
+    operator: operatorName,
+    args: [lhsColumn, rhsColumn],
+  } = expressionParts(query, stageIndex, condition);
+
+  if (!isColumnMetadata(lhsColumn) || !isColumnMetadata(rhsColumn)) {
+    throw new TypeError("Unexpected join condition");
+  }
+
+  const operator = joinConditionOperators(
+    query,
+    stageIndex,
+    lhsColumn,
+    rhsColumn,
+  ).find(op => displayInfo(query, stageIndex, op).shortName === operatorName);
+
+  if (!operator) {
+    throw new TypeError("Unexpected join condition");
+  }
+
+  return { operator, lhsColumn, rhsColumn };
 }
 
 export function withJoinConditions(
   join: Join,
-  newConditions: FilterClause[] | ExternalOp[],
+  newConditions: JoinCondition[],
 ): Join {
   return ML.with_join_conditions(join, newConditions);
+}
+
+export function joinConditionUpdateTemporalBucketing(
+  query: Query,
+  stageIndex: number,
+  condition: JoinCondition,
+  bucket: Bucket,
+): JoinCondition {
+  return ML.join_condition_update_temporal_bucketing(
+    query,
+    stageIndex,
+    condition,
+    bucket,
+  );
 }
 
 /**
  * Get a sequence of columns that can be used as the left-hand-side (source column) in a join condition. This column
  * is the one that comes from the source Table/Card/previous stage of the query or a previous join.
  *
- * If you are changing the LHS of a condition for an existing join, pass in that existing join as `join-or-joinable` so
+ * If you are changing the LHS of a condition for an existing join, pass in that existing join as `joinOrJoinable` so
  * we can filter out the columns added by it (it doesn't make sense to present the columns added by a join as options
  * for its own LHS) or added by later joins (joins can only depend on things from previous joins). Otherwise you can
  * either pass in `nil` or the `Joinable` (Table or Card metadata) we're joining against when building a new
@@ -106,7 +159,7 @@ export function joinConditionLHSColumns(
 
 /**
  * Get a sequence of columns that can be used as the right-hand-side (target column) in a join condition. This column
- * is the one that belongs to the thing being joined, `join-or-joinable`, which can be something like a
+ * is the one that belongs to the thing being joined, `joinOrJoinable`, which can be something like a
  * TableMetadata, Saved Question/Model (CardMetadata), another query, etc. -- anything you can pass to `join-clause`.
  * You can also pass in an existing join.
  *
@@ -139,7 +192,7 @@ export function joinConditionOperators(
   stageIndex: number,
   lhsColumn?: ColumnMetadata,
   rhsColumn?: ColumnMetadata,
-): FilterOperator[] {
+): JoinConditionOperator[] {
   return ML.join_condition_operators(query, stageIndex, lhsColumn, rhsColumn);
 }
 
@@ -147,11 +200,11 @@ export function suggestedJoinCondition(
   query: Query,
   stageIndex: number,
   joinable: Joinable,
-): FilterClause | null {
+): JoinCondition | null {
   return ML.suggested_join_condition(query, stageIndex, joinable);
 }
 
-type JoinFields = ColumnMetadata[] | "all" | "none";
+export type JoinFields = ColumnMetadata[] | "all" | "none";
 
 export function joinFields(join: Join): JoinFields {
   return ML.join_fields(join);
@@ -202,14 +255,50 @@ export function joinableColumns(
 }
 
 /**
- * Get the display name to use when rendering a join for whatever we are joining against (e.g. a Table or Card of some
- * sort). See #32015 for screenshot examples. For an existing join, pass in the join clause. When constructing a join,
- * pass in the thing we are joining against, e.g. a TableMetadata or CardMetadata.
+ * Get the display name for whatever we are joining. See #32015 and #32764 for screenshot examples.
+ *
+ * The rules, copied from MLv1, are as follows:
+ *
+ * 1. If we have the LHS column for the first join condition, we should use display name for wherever it comes from.
+ *    E.g. if the join is
+ *
+ *    ```
+ *    JOIN whatever ON orders.whatever_id = whatever.id
+ *    ```
+ *
+ *    then we should display the join like this:
+ *
+ *   ```
+ *   +--------+   +----------+    +-------------+    +----------+
+ *   | Orders | + | Whatever | on | Orders      | =  | Whatever |
+ *   |        |   |          |    | Whatever ID |    | ID       |
+ *   +--------+   +----------+    +-------------+    +----------+
+ *   ```
+ *
+ *   1a. If `joinOrJoinable` is a join, we can take the condition LHS column from the join itself, since a join will
+ *       always have a condition.
+ *
+ *   1b. When building a join, you can optionally pass in `conditionLHSColumn` yourself.
+ *
+ * 2. If the condition LHS column is unknown, and this is the first join in the first stage of a query, and the query
+ *    uses a source Table, then use the display name for the source Table.
+ *
+ * 3. Otherwise use `Previous results`.
+ *
+ * This function needs to be usable while we are in the process of constructing a join in the context of a given stage,
+ * but also needs to work for rendering existing joins. Pass a join in for existing joins, or something [[Joinable]]
+ * for ones we are currently building.
  */
 export function joinLHSDisplayName(
   query: Query,
   stageIndex: number,
   joinOrJoinable?: JoinOrJoinable,
+  conditionLHSColumn?: ColumnMetadata,
 ): string {
-  return ML.join_lhs_display_name(query, stageIndex, joinOrJoinable);
+  return ML.join_lhs_display_name(
+    query,
+    stageIndex,
+    joinOrJoinable,
+    conditionLHSColumn,
+  );
 }

@@ -1,10 +1,8 @@
 import { useState } from "react";
-import { ObjectDetailProps } from "metabase/visualizations/components/ObjectDetail/types";
-import {
-  PaginationFooter,
-  RootModal,
-} from "metabase/visualizations/components/ObjectDetail/ObjectDetail.styled";
-import { ObjectDetailView } from "metabase/visualizations/components/ObjectDetail/ObjectDetail";
+
+import { ObjectDetailView } from "./ObjectDetailView";
+import { PaginationFooter, RootModal } from "./ObjectDetailWrapper.styled";
+import type { ObjectDetailProps } from "./types";
 
 export function ObjectDetailWrapper({
   question,
@@ -50,7 +48,7 @@ export function ObjectDetailWrapper({
         data={data}
         question={question}
         showHeader={props.settings["detail.showHeader"]}
-        showActions={false}
+        showControls={false}
         showRelations={false}
         closeObjectDetail={closeObjectDetail}
         isDataApp={isDataApp}

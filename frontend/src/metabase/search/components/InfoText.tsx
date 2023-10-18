@@ -9,13 +9,13 @@ import Schema from "metabase/entities/schemas";
 import Database from "metabase/entities/databases";
 import Table from "metabase/entities/tables";
 import { PLUGIN_COLLECTIONS } from "metabase/plugins";
-import { getTranslatedEntityName } from "metabase/nav/utils";
+import { getTranslatedEntityName } from "metabase/common/utils/model-names";
 
 import type { Collection } from "metabase-types/api";
+import type { WrappedResult } from "metabase/search/types";
 import type TableType from "metabase-lib/metadata/Table";
 
 import { CollectionBadge } from "./CollectionBadge";
-import type { WrappedResult } from "./types";
 
 export function InfoText({ result }: { result: WrappedResult }) {
   let textContent: string | string[] | JSX.Element;

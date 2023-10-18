@@ -2,7 +2,6 @@
   (:require
    [clojure.test :refer [deftest is testing]]
    [metabase.lib.core :as lib]
-   [metabase.lib.metadata.calculation :as lib.metadata.calculation]
    [metabase.lib.metadata.protocols :as metadata.protocols]
    [metabase.lib.test-metadata :as meta]
    [metabase.lib.test-util :as lib.tu]
@@ -42,5 +41,5 @@
             (fields   [_this table-id] (mapv #(assoc % :name nil)
                                              (metadata.protocols/fields meta/metadata-provider table-id))))
           query (lib/query metadata-provider (meta/table-metadata :venues))]
-      (binding [mu/*enforce* false]
-        (is (sequential? (lib.metadata.calculation/visible-columns query)))))))
+      (mu/disable-enforcement
+        (is (sequential? (lib/visible-columns query)))))))

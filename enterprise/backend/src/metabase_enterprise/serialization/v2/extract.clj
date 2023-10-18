@@ -11,7 +11,6 @@
    [metabase.models.collection :as collection]
    [metabase.models.serialization :as serdes]
    [metabase.util.log :as log]
-   [toucan.db :as db]
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
@@ -86,8 +85,8 @@
         collection-set (into collection-ids (mapcat collection/descendant-ids) (t2/select Collection :id [:in collection-ids]))
         dashboards     (t2/select Dashboard :collection_id [:in collection-set])
         ;; All cards that are in this collection set.
-        cards          (reduce set/union (for [coll-id collection-set]
-                                           (t2/select-pks-set Card :collection_id coll-id)))
+        cards          (reduce set/union #{} (for [coll-id collection-set]
+                                               (t2/select-pks-set Card :collection_id coll-id)))
 
         ;; Map of {dashboard-id #{DashboardCard}} for dashcards whose cards OR parameter-bound cards are outside the
         ;; transitive collection set.
@@ -184,7 +183,7 @@ Eg. if Dashboard B includes a Card A that is derived from a
                           (update-vals #(set (map second %))))
           extract-ids (fn [[model ids]]
                         (eduction (map #(serdes/extract-one model opts %))
-                                  (db/select-reducible (symbol model) :id [:in ids])))]
+                                  (t2/reducible-select (symbol model) :id [:in ids])))]
       (eduction cat
                 [(eduction (map extract-ids) cat by-model)
                  ;; extract all non-content entities like data model and settings if necessary

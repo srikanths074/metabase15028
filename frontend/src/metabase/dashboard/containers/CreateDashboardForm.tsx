@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { t } from "ttag";
 import _ from "underscore";
 import * as Yup from "yup";
@@ -6,9 +6,8 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router";
 
 import Button from "metabase/core/components/Button";
-import Form from "metabase/core/components/Form";
 import FormFooter from "metabase/core/components/FormFooter";
-import FormProvider from "metabase/core/components/FormProvider";
+import { Form, FormProvider } from "metabase/forms";
 import FormInput from "metabase/core/components/FormInput";
 import FormTextArea from "metabase/core/components/FormTextArea";
 import FormSubmitButton from "metabase/core/components/FormSubmitButton";
@@ -19,9 +18,7 @@ import * as Errors from "metabase/core/utils/errors";
 import Collections from "metabase/entities/collections";
 import Dashboards from "metabase/entities/dashboards";
 
-import FormCollectionPicker, {
-  NewCollectionButton,
-} from "metabase/collections/containers/FormCollectionPicker/FormCollectionPicker";
+import FormCollectionPicker from "metabase/collections/containers/FormCollectionPicker/FormCollectionPicker";
 
 import type { CollectionId, Dashboard } from "metabase-types/api";
 import type { State } from "metabase-types/store";
@@ -41,17 +38,10 @@ export interface CreateDashboardProperties {
   collection_id: CollectionId;
 }
 
-export interface StagedDashboard {
-  values: CreateDashboardProperties;
-  handleCreate: (values: CreateDashboardProperties) => void;
-  openCollectionId: CollectionId | undefined;
-}
-
 export interface CreateDashboardFormOwnProps {
   collectionId?: CollectionId | null; // can be used by `getInitialCollectionId`
   onCreate?: (dashboard: Dashboard) => void;
   onCancel?: () => void;
-  saveToNewCollection?: (stagedDash: StagedDashboard) => void;
   initialValues?: CreateDashboardProperties | null;
 }
 
@@ -87,7 +77,6 @@ function CreateDashboardForm({
   handleCreateDashboard,
   onCreate,
   onCancel,
-  saveToNewCollection,
   initialValues,
 }: Props) {
   const computedInitialValues = useMemo(
@@ -108,15 +97,13 @@ function CreateDashboardForm({
     [handleCreateDashboard, onCreate],
   );
 
-  const [openCollectionId, setOpenCollectionId] = useState<CollectionId>();
-
   return (
     <FormProvider
       initialValues={computedInitialValues}
       validationSchema={DASHBOARD_SCHEMA}
       onSubmit={handleCreate}
     >
-      {({ dirty, isValid, values }) => (
+      {() => (
         <Form>
           <FormInput
             name="name"
@@ -131,27 +118,15 @@ function CreateDashboardForm({
             nullable
           />
           <FormCollectionPicker
-            onOpenCollectionChange={setOpenCollectionId}
             name="collection_id"
             title={t`Which collection should this go in?`}
-          >
-            <NewCollectionButton
-              disabled={!isValid}
-              onClick={() =>
-                saveToNewCollection?.({
-                  values,
-                  handleCreate,
-                  openCollectionId,
-                })
-              }
-            />
-          </FormCollectionPicker>
+          />
           <FormFooter>
             <FormErrorMessage inline />
             {!!onCancel && (
               <Button type="button" onClick={onCancel}>{t`Cancel`}</Button>
             )}
-            <FormSubmitButton title={t`Create`} disabled={!dirty} primary />
+            <FormSubmitButton title={t`Create`} primary />
           </FormFooter>
         </Form>
       )}

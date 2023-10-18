@@ -1,7 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { ROOT_COLLECTION } from "metabase/entities/collections";
 import { checkNotNull } from "metabase/core/utils/types";
-import { Card, ParameterValues } from "metabase-types/api";
+import type { Card, ParameterValues } from "metabase-types/api";
 import {
   createMockCard,
   createMockCollection,
@@ -19,8 +19,12 @@ import {
   setupUnauthorizedCardsEndpoints,
   setupUnauthorizedCollectionsEndpoints,
 } from "__support__/server-mocks";
-import { renderWithProviders, screen, waitFor } from "__support__/ui";
-import { UiParameter } from "metabase-lib/parameters/types";
+import {
+  renderWithProviders,
+  screen,
+  waitForLoaderToBeRemoved,
+} from "__support__/ui";
+import type { UiParameter } from "metabase-lib/parameters/types";
 import { createMockUiParameter } from "metabase-lib/parameters/mock";
 import ValuesSourceModal from "./ValuesSourceModal";
 
@@ -425,9 +429,7 @@ const setup = async ({
     />,
   );
 
-  await waitFor(() => {
-    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
-  });
+  await waitForLoaderToBeRemoved();
 
   return { onSubmit };
 };

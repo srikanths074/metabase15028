@@ -6,6 +6,7 @@
   Some primitives below are duplicated from [[metabase.util.malli.schema]] since that's not `.cljc`. Other stuff is
   copied from [[metabase.mbql.schema]] so this can exist completely independently; hopefully at some point in the
   future we can deprecate that namespace and eventually do away with it entirely."
+  (:refer-clojure :exclude [ref])
   (:require
    [metabase.lib.schema.aggregation :as aggregation]
    [metabase.lib.schema.common :as common]
@@ -22,6 +23,7 @@
    [metabase.lib.schema.ref :as ref]
    [metabase.lib.schema.template-tag :as template-tag]
    [metabase.lib.schema.util :as lib.schema.util]
+   [metabase.mbql.util :as mbql.u]
    [metabase.mbql.util.match :as mbql.match]
    [metabase.util.malli.registry :as mr]))
 
@@ -49,28 +51,66 @@
    ;; `:native` key), but their definition lives under this key.
    [:template-tags {:optional true} [:ref ::template-tag/template-tag-map]]])
 
-(mr/def ::breakouts
-  [:sequential {:min 1} [:ref ::ref/ref]])
+(mr/def ::breakout
+  [:ref ::ref/ref])
 
-;;; TODO -- `:fields` is supposed to be distinct (ignoring UUID), e.g. you can't have `[:field {} 1]` in there
-;;; twice. (#32489)
+(mr/def ::breakouts
+  [:and
+   [:sequential {:min 1} ::breakout]
+   [:fn
+    {:error/message "Breakouts must be distinct"}
+    #'lib.schema.util/distinct-refs?]])
+
 (mr/def ::fields
-  [:sequential {:min 1} [:ref ::ref/ref]])
+  [:and
+   [:sequential {:min 1} [:ref ::ref/ref]]
+   [:fn
+    {:error/message ":fields must be distinct"}
+    #'lib.schema.util/distinct-refs?]])
+
+;; this is just for enabling round-tripping filters with named segment references
+(mr/def ::filterable
+  [:or
+   [:ref ::expression/boolean]
+   [:tuple [:= :segment] :map :string]])
 
 (mr/def ::filters
-  [:sequential {:min 1} [:ref ::expression/boolean]])
+  [:sequential {:min 1} ::filterable])
+
+(defn- bad-ref-clause? [ref-type valid-ids x]
+  (and (vector? x)
+       (= ref-type (first x))
+       (not (contains? valid-ids (get x 2)))))
+
+(defn- expression-ref-errors-for-stage [stage]
+  (let [expression-names (into #{} (map (comp :lib/expression-name second)) (:expressions stage))]
+    (mbql.u/matching-locations (dissoc stage :joins :lib/stage-metadata)
+                               #(bad-ref-clause? :expression expression-names %))))
+
+(defn- aggregation-ref-errors-for-stage [stage]
+  (let [uuids (into #{} (map (comp :lib/uuid second)) (:aggregation stage))]
+    (mbql.u/matching-locations (dissoc stage :joins :lib/stage-metadata)
+                               #(bad-ref-clause? :aggregation uuids %))))
+
+(defn ref-errors-for-stage
+  "Return the locations and the clauses with dangling expression or aggregation references.
+  The return value is sequence of pairs (vectors) with the first element specifying the location
+  as a vector usable in [[get-in]] and the second element being the clause with dangling reference."
+  [stage]
+  (concat (expression-ref-errors-for-stage stage)
+          (aggregation-ref-errors-for-stage stage)))
 
 (defn- expression-ref-error-for-stage [stage]
-  (let [expression-names (into #{} (map (comp :lib/expression-name second)) (:expressions stage))]
-    (mbql.match/match-one (dissoc stage :joins :lib/stage-metadata)
-      [:expression _opts (expression-name :guard (complement expression-names))]
-      (str "Invalid :expression reference: no expression named " (pr-str expression-name)))))
+  (when-let [err-loc (first (expression-ref-errors-for-stage stage))]
+    (if-let [expression-name (get-in err-loc [1 2])]
+      (str "Invalid :expression reference: no expression named " (pr-str expression-name))
+      (str "Invalid :expression reference: " (get err-loc 1)))))
 
 (defn- aggregation-ref-error-for-stage [stage]
-  (let [uuids (into #{} (map (comp :lib/uuid second)) (:aggregation stage))]
-    (mbql.match/match-one (dissoc stage :joins :lib/stage-metadata)
-      [:aggregation _opts (ag-uuid :guard (complement uuids))]
-      (str "Invalid :aggregation reference: no aggregation with uuid " ag-uuid))))
+  (when-let [err-loc (first (aggregation-ref-errors-for-stage stage))]
+    (if-let [ag-uuid (get-in err-loc [1 2])]
+      (str "Invalid :aggregation reference: no aggregation with uuid " ag-uuid)
+      (str "Invalid :aggregation reference: " (get err-loc 1)))))
 
 (def ^:private ^{:arglists '([stage])} ref-error-for-stage
   "Validate references in the context of a single `stage`, independent of any previous stages. If there is an error with
@@ -97,7 +137,9 @@
     [:filters      {:optional true} ::filters]
     [:order-by     {:optional true} [:ref ::order-by/order-bys]]
     [:source-table {:optional true} [:ref ::id/table]]
-    [:source-card  {:optional true} [:ref ::id/card]]]
+    [:source-card  {:optional true} [:ref ::id/card]]
+    ;; TODO -- `:page` ???
+    ]
    [:fn
     {:error/message ":source-query is not allowed in pMBQL queries."}
     #(not (contains? % :source-query))]
@@ -183,14 +225,15 @@
       (set (join-aliases-in-stage stage)))))
 
 (defn- join-ref-error-for-stages [stages]
-  (loop [visible-join-alias? (constantly false), i 0, [stage & more] stages]
-    (let [visible-join-alias? (some-fn visible-join-alias? (visible-join-alias?-fn stage))]
-      (or
-       (mbql.match/match-one (dissoc stage :joins :stage/metadata)
-         [:field ({:join-alias (join-alias :guard (complement visible-join-alias?))} :guard :join-alias) _id-or-name]
-         (str "Invalid :field reference in stage " i ": no join named " (pr-str join-alias)))
-       (when (seq more)
-         (recur visible-join-alias? (inc i) more))))))
+  (when (sequential? stages)
+    (loop [visible-join-alias? (constantly false), i 0, [stage & more] stages]
+      (let [visible-join-alias? (some-fn visible-join-alias? (visible-join-alias?-fn stage))]
+        (or
+         (mbql.match/match-one (dissoc stage :joins :stage/metadata) ; TODO isn't this supposed to be `:lib/stage-metadata`?
+           [:field ({:join-alias (join-alias :guard (complement visible-join-alias?))} :guard :join-alias) _id-or-name]
+           (str "Invalid :field reference in stage " i ": no join named " (pr-str join-alias)))
+         (when (seq more)
+           (recur visible-join-alias? (inc i) more)))))))
 
 (def ^:private ^{:arglists '([stages])} ref-error-for-stages
   "Like [[ref-error-for-stage]], but validate references in the context of a sequence of several stages; for validations

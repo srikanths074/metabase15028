@@ -7,7 +7,7 @@ import QuestionModerationIcon from "./components/QuestionModerationIcon";
 import QuestionModerationSection from "./components/QuestionModerationSection";
 import QuestionModerationButton from "./components/QuestionModerationButton";
 import ModerationReviewBanner from "./components/ModerationReviewBanner";
-import ModerationStatusIcon from "./components/ModerationStatusIcon";
+import { ModerationStatusIcon } from "./components/ModerationStatusIcon";
 
 import {
   MODERATION_STATUS,
@@ -19,7 +19,7 @@ import {
   getLatestModerationReview,
 } from "./service";
 
-if (hasPremiumFeature("content_management")) {
+if (hasPremiumFeature("content_verification")) {
   Object.assign(PLUGIN_MODERATION, {
     isEnabled: () => true,
     QuestionModerationIcon,

@@ -1,4 +1,4 @@
-import { IconName, IconProps } from "metabase/core/components/Icon";
+import type { IconName, IconProps } from "metabase/core/components/Icon";
 
 import { color } from "metabase/lib/colors";
 
@@ -20,7 +20,7 @@ export function normalizedCollection(collection: Collection) {
 }
 
 export function getCollectionIcon(
-  collection: Collection,
+  collection: Partial<Collection>,
   { tooltip = "default" } = {},
 ): {
   name: IconName;

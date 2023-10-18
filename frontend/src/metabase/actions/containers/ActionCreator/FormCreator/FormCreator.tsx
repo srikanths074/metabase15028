@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useMemo, useState } from "react";
 import { jt, t } from "ttag";
 import _ from "underscore";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import { Droppable, Draggable } from "react-beautiful-dnd";
 
 import type {
   DraggableProvided,
@@ -9,9 +9,9 @@ import type {
   DropResult,
 } from "react-beautiful-dnd";
 
+import { DragDropContext } from "metabase/core/components/DragDropContext";
 import ExternalLink from "metabase/core/components/ExternalLink";
-import Form from "metabase/core/components/Form";
-import FormProvider from "metabase/core/components/FormProvider";
+import { Form, FormProvider } from "metabase/forms";
 
 import MetabaseSettings from "metabase/lib/settings";
 

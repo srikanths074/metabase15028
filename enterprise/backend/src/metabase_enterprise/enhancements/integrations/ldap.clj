@@ -3,7 +3,6 @@
   (:require
    [metabase.integrations.common :as integrations.common]
    [metabase.integrations.ldap.default-implementation :as default-impl]
-   [metabase.models.interface :as mi]
    [metabase.models.setting :as setting :refer [defsetting]]
    [metabase.models.user :as user :refer [User]]
    [metabase.public-settings.premium-features
@@ -11,14 +10,14 @@
     :refer [defenterprise-schema]]
    [metabase.util :as u]
    [metabase.util.i18n :refer [deferred-tru]]
-   [metabase.util.schema :as su]
-   [schema.core :as s]
+   [metabase.util.malli.schema :as ms]
    [toucan2.core :as t2])
   (:import
    (com.unboundid.ldap.sdk LDAPConnectionPool)))
 
 (def ^:private EEUserInfo
-  (assoc default-impl/UserInfo :attributes (s/maybe {s/Keyword s/Any})))
+  [:merge default-impl/UserInfo
+   [:map [:attributes [:maybe [:map-of :keyword :any]]]]])
 
 (defsetting ldap-sync-user-attributes
   (deferred-tru "Should we sync user attributes when someone logs in via LDAP?")
@@ -59,11 +58,11 @@
           (t2/select-one [User :id :last_login :is_active] :id (:id user))) ; Reload updated user
         user))))
 
-(defenterprise-schema find-user :- (s/maybe EEUserInfo)
+(defenterprise-schema find-user :- [:maybe EEUserInfo]
   "Get user information for the supplied username."
-  :feature :sso
-  [ldap-connection :- LDAPConnectionPool
-   username        :- su/NonBlankString
+  :feature :sso-ldap
+  [ldap-connection :- (ms/InstanceOfClass LDAPConnectionPool)
+   username        :- ms/NonBlankString
    settings        :- default-impl/LDAPSettings]
   (when-let [result (default-impl/search ldap-connection username settings)]
     (when-let [user-info (default-impl/ldap-search-result->user-info
@@ -73,9 +72,11 @@
                           (ldap-group-membership-filter))]
       (assoc user-info :attributes (syncable-user-attributes result)))))
 
-(defenterprise-schema fetch-or-create-user! :- (mi/InstanceOf User)
+;;; for some reason the `:clj-kondo/ignore` doesn't work inside of [[defenterprise-schema]]
+#_{:clj-kondo/ignore [:deprecated-var]}
+(defenterprise-schema fetch-or-create-user! :- (ms/InstanceOf User)
   "Using the `user-info` (from `find-user`) get the corresponding Metabase user, creating it if necessary."
-  :feature :sso
+  :feature :sso-ldap
   [{:keys [first-name last-name email groups attributes], :as user-info} :- EEUserInfo
    {:keys [sync-groups?], :as settings}                                  :- default-impl/LDAPSettings]
   (let [user (or (attribute-synced-user user-info)

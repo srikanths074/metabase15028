@@ -15,8 +15,10 @@
    [metabase.models.permissions-group :as perms-group]
    [metabase.models.permissions-test :as perms-test]
    [metabase.models.serialization :as serdes]
+   [metabase.models.setting :as setting]
    [metabase.models.user :as user]
    [metabase.public-settings.premium-features-test :as premium-features-test]
+   [metabase.server.middleware.session :as mw.session]
    [metabase.test :as mt]
    [metabase.test.data.users :as test.users]
    [metabase.test.integrations.ldap :as ldap.test]
@@ -82,7 +84,7 @@
       (perms/grant-permissions! group-id (perms/table-read-path table))
       (is (set/subset?
            #{(perms/table-read-path table)}
-           (metabase.models.user/permissions-set (mt/user->id :rasta)))))))
+           (user/permissions-set (mt/user->id :rasta)))))))
 
 ;;; Tests for invite-user and create-new-google-auth-user!
 
@@ -185,7 +187,7 @@
                      (select-keys ["crowberto@metabase.com" (:email user)])))))
 
         (testing "...or if setting is disabled"
-          (premium-features-test/with-premium-features #{:sso}
+          (premium-features-test/with-premium-features #{:sso-ldap}
             (mt/with-temporary-raw-setting-values [send-new-sso-user-admin-email? "false"]
               (t2.with-temp/with-temp [User _ {:is_superuser true, :email "some_other_admin@metabase.com"}]
                 (is (= (if config/ee-available? {} {"crowberto@metabase.com" ["<New User> created a Metabase account"],
@@ -193,11 +195,12 @@
                        (-> (invite-user-accept-and-check-inboxes! :google-auth? true)
                            (select-keys ["crowberto@metabase.com" "some_other_admin@metabase.com"])))))))))))
 
-  (testing "if sso enabled and password login is disabled, email should send a link to sso login"
-    (mt/with-temporary-setting-values [enable-password-login false]
-      (ldap.test/with-ldap-server
-        (invite-user-accept-and-check-inboxes! :invitor default-invitor , :accept-invite? false)
-        (is (seq (mt/regex-email-bodies #"/auth/login")))))))
+ (testing "if sso enabled and password login is disabled, email should send a link to sso login"
+   (premium-features-test/with-premium-features #{:disable-password-login}
+     (mt/with-temporary-setting-values [enable-password-login false]
+       (ldap.test/with-ldap-server
+         (invite-user-accept-and-check-inboxes! :invitor default-invitor , :accept-invite? false)
+         (is (seq (mt/regex-email-bodies #"/auth/login"))))))))
 
 (deftest ldap-user-passwords-test
   (testing (str "LDAP users should not persist their passwords. Check that if somehow we get passed an LDAP user "
@@ -381,7 +384,7 @@
       (testing "Invalid ADD operation"
         ;; User should not be removed from the admin group because the attempt to add them to the Integer/MAX_VALUE group
         ;; should fail, causing the entire transaction to fail
-        (t2.with-temp/with-temp [User user {:is_superuser true}]
+        (mt/with-temp! [User user {:is_superuser true}]
           (u/ignore-exceptions
             (user/set-permissions-groups! user #{(perms-group/all-users) Integer/MAX_VALUE}))
           (is (= true
@@ -510,3 +513,43 @@
               (is (u.password/verify-password plaintext-password
                                               (salt)
                                               new-hashed-password)))))))))
+
+(deftest last-acknowledged-version-can-be-read-and-set
+  (testing "last-acknowledged-version can be read and set"
+    (mt/with-test-user :rasta
+      (let [old-version (setting/get :last-acknowledged-version)
+            new-version "v0.47.1"]
+        (try
+          (is (not= new-version old-version))
+          (setting/set! :last-acknowledged-version new-version)
+          (is (= new-version (setting/get :last-acknowledged-version)))
+          ;; Ensure it's saved on the user, not globally:
+          (is (= new-version (:last-acknowledged-version (t2/select-one-fn :settings User :id (mt/user->id :rasta)))))
+          (finally
+            (setting/set! :last-acknowledged-version old-version)))))))
+
+(deftest last-acknowledged-version-is-set-on-create
+  (testing "last-acknowledged-version is automatically set for new users"
+    (with-redefs [config/mb-version-info (assoc config/mb-version-info :tag "v0.47.1")]
+      (t2.with-temp/with-temp [User {user-id :id} {}]
+        (mw.session/with-current-user user-id
+          (is (= "v0.47.1" (setting/get :last-acknowledged-version))))))))
+
+(deftest common-name-test
+  (testing "common_name should be present depending on what is selected"
+    (mt/with-temp [User user {:first_name "John"
+                              :last_name  "Smith"
+                              :email      "john.smith@gmail.com"}]
+      (is (= "John Smith"
+             (:common_name (t2/select-one [User :first_name :last_name] (:id user)))))
+      (is (= "John Smith"
+             (:common_name (t2/select-one User (:id user)))))
+      (is (nil? (:common_name (t2/select-one [User :first_name :email] (:id user)))))
+      (is (nil? (:common_name (t2/select-one [User :email] (:id user)))))))
+  (testing "common_name should be present if first_name and last_name are selected but nil and email is also selected"
+    (mt/with-temp [User user {:first_name nil
+                              :last_name  nil
+                              :email      "john.smith@gmail.com"}]
+      (is (= "john.smith@gmail.com"
+             (:common_name (t2/select-one [User :email :first_name :last_name] (:id user)))))
+      (is (nil? (:common_name (t2/select-one [User :first_name :last_name] (:id user))))))))

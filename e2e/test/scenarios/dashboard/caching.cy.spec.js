@@ -5,7 +5,10 @@ import {
   visitDashboard,
   rightSidebar,
   setTokenFeatures,
+  toggleDashboardInfoSidebar,
 } from "e2e/support/helpers";
+
+import { ORDERS_DASHBOARD_ID } from "e2e/support/cypress_sample_instance_data";
 
 describeEE("scenarios > dashboard > caching", () => {
   beforeEach(() => {
@@ -16,10 +19,12 @@ describeEE("scenarios > dashboard > caching", () => {
   });
 
   it("can set cache ttl for a saved question", () => {
-    cy.intercept("PUT", "/api/dashboard/1").as("updateDashboard");
-    visitDashboard(1);
+    cy.intercept("PUT", `/api/dashboard/${ORDERS_DASHBOARD_ID}`).as(
+      "updateDashboard",
+    );
+    visitDashboard(ORDERS_DASHBOARD_ID);
 
-    openDashboardInfo();
+    toggleDashboardInfoSidebar();
 
     rightSidebar().within(() => {
       cy.findByText(/Cache Configuration/).click();
@@ -33,7 +38,7 @@ describeEE("scenarios > dashboard > caching", () => {
     cy.wait("@updateDashboard");
     cy.reload();
 
-    openDashboardInfo();
+    toggleDashboardInfoSidebar();
 
     rightSidebar().within(() => {
       cy.findByText(/Cache Configuration/).click();
@@ -47,7 +52,7 @@ describeEE("scenarios > dashboard > caching", () => {
     cy.wait("@updateDashboard");
     cy.reload();
 
-    openDashboardInfo();
+    toggleDashboardInfoSidebar();
 
     rightSidebar().within(() => {
       cy.findByText(/Cache Configuration/).click();
@@ -58,9 +63,3 @@ describeEE("scenarios > dashboard > caching", () => {
     });
   });
 });
-
-function openDashboardInfo() {
-  cy.get("main header").within(() => {
-    cy.icon("info").click();
-  });
-}

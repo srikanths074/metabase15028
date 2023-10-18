@@ -29,6 +29,8 @@ import arrow_left_component from "./arrow_left.svg?component";
 import arrow_left_source from "./arrow_left.svg?source";
 import arrow_left_to_line_component from "./arrow_left_to_line.svg?component";
 import arrow_left_to_line_source from "./arrow_left_to_line.svg?source";
+import arrow_right_component from "./arrow_right.svg?component";
+import arrow_right_source from "./arrow_right.svg?source";
 import arrow_split_component from "./arrow_split.svg?component";
 import arrow_split_source from "./arrow_split.svg?source";
 import badge_component from "./badge.svg?component";
@@ -159,6 +161,8 @@ import hourglass_component from "./hourglass.svg?component";
 import hourglass_source from "./hourglass.svg?source";
 import info_component from "./info.svg?component";
 import info_source from "./info.svg?source";
+import info_filled_component from "./info_filled.svg?component";
+import info_filled_source from "./info_filled.svg?source";
 import info_outline_component from "./info_outline.svg?component";
 import info_outline_source from "./info_outline.svg?source";
 import insight_component from "./insight.svg?component";
@@ -331,6 +335,8 @@ import variable_component from "./variable.svg?component";
 import variable_source from "./variable.svg?source";
 import verified_component from "./verified.svg?component";
 import verified_source from "./verified.svg?source";
+import verified_filled_component from "./verified_filled.svg?component";
+import verified_filled_source from "./verified_filled.svg?source";
 import view_archive_component from "./view_archive.svg?component";
 import view_archive_source from "./view_archive.svg?source";
 import warning_component from "./warning.svg?component";
@@ -406,6 +412,10 @@ export const Icons = {
   arrow_left_to_line: {
     component: arrow_left_to_line_component,
     source: arrow_left_to_line_source,
+  },
+  arrow_right: {
+    component: arrow_right_component,
+    source: arrow_right_source,
   },
   arrow_split: {
     component: arrow_split_component,
@@ -666,6 +676,10 @@ export const Icons = {
   info: {
     component: info_component,
     source: info_source,
+  },
+  info_filled: {
+    component: info_filled_component,
+    source: info_filled_source,
   },
   info_outline: {
     component: info_outline_component,
@@ -1011,6 +1025,10 @@ export const Icons = {
     component: verified_component,
     source: verified_source,
   },
+  verified_filled: {
+    component: verified_filled_component,
+    source: verified_filled_source,
+  },
   view_archive: {
     component: view_archive_component,
     source: view_archive_source,
@@ -1043,7 +1061,7 @@ export const Icons = {
     component: number_component,
     source: number_source,
   },
-  balloons: {
+  cake: {
     component: birthday_component,
     source: birthday_source,
   },

@@ -2,9 +2,10 @@
   (:require
    [cheshire.core :as json]
    [clojure.data :as data]
+   [metabase.config :as config]
    [metabase.db.util :as mdb.u]
    [metabase.models.interface :as mi]
-   [metabase.models.revision.diff :refer [build-sentence diff-strings*]]
+   [metabase.models.revision.diff :refer [diff-strings*]]
    [metabase.models.user :refer [User]]
    [metabase.util :as u]
    [metabase.util.i18n :refer [deferred-tru tru]]
@@ -73,7 +74,7 @@
 
 (t2/define-before-insert :model/Revision
   [revision]
-  (assoc revision :timestamp :%now))
+  (assoc revision :timestamp :%now :metabase_version config/mb-version-string))
 
 (t2/define-before-update :model/Revision
   [_revision]
@@ -106,7 +107,7 @@
   [model prev-revision revision]
   (let [changes (revision-changes model prev-revision revision)]
     {:description          (if (seq changes)
-                             (build-sentence changes)
+                             (u/build-sentence changes)
                              ;; HACK: before #30285 we record revision even when there is nothing changed,
                              ;; so there are cases when revision can comeback as `nil`.
                              ;; This is a safe guard for us to not display "Crowberto null" as

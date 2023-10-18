@@ -1,7 +1,7 @@
 import cx from "classnames";
 import styled from "@emotion/styled";
 import { css } from "@emotion/react";
-import { ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 import { color } from "metabase/lib/colors";
 import { space } from "metabase/styled-components/theme";
 
@@ -112,8 +112,8 @@ export const ParametersWidgetContainer = styled(FullWidthContainer)<{
   flex-direction: row;
   padding-top: ${space(2)};
   padding-bottom: ${space(1)};
+  /* z-index should be higher than in dashcards */
   z-index: 3;
-  position: sticky;
   top: 0;
   left: 0;
 
@@ -123,9 +123,11 @@ export const ParametersWidgetContainer = styled(FullWidthContainer)<{
       border-top: 1px solid ${color("border")};
     `}
 
+  /* isSticky is calculated mostly for border showing, otherwise it could be replaced with css only */
   ${({ isSticky }) =>
     isSticky &&
     css`
+      position: sticky;
       border-bottom: 1px solid ${color("border")};
     `}
 `;

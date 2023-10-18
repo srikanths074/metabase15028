@@ -1,19 +1,14 @@
 import userEvent from "@testing-library/user-event";
 import fetchMock from "fetch-mock";
 
-import {
-  renderWithProviders,
-  screen,
-  waitFor,
-  waitForElementToBeRemoved,
-} from "__support__/ui";
+import { renderWithProviders, screen, waitFor } from "__support__/ui";
 import {
   setupCardsEndpoints,
   setupCollectionsEndpoints,
   setupDatabasesEndpoints,
 } from "__support__/server-mocks";
 
-import { GroupTableAccessPolicy } from "metabase-types/api";
+import type { GroupTableAccessPolicy } from "metabase-types/api";
 import { createMockCard, createMockCollection } from "metabase-types/api/mocks";
 import {
   createSampleDatabase,
@@ -141,7 +136,9 @@ describe("EditSandboxingModal", () => {
 
         userEvent.click(screen.getByText("Save"));
 
-        await waitForElementToBeRemoved(() => screen.queryByText("Saving..."));
+        await waitFor(() => {
+          expect(screen.queryByText("Saving...")).not.toBeInTheDocument();
+        });
 
         expect(onSave).toHaveBeenCalledWith({
           attribute_remappings: {},
@@ -185,7 +182,9 @@ describe("EditSandboxingModal", () => {
 
       userEvent.click(screen.getByText("Save"));
 
-      await waitForElementToBeRemoved(() => screen.queryByText("Saving..."));
+      await waitFor(() => {
+        expect(screen.queryByText("Saving...")).not.toBeInTheDocument();
+      });
 
       expect(onSave).toHaveBeenCalledWith({
         id: 1,

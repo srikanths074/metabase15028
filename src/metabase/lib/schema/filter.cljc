@@ -54,7 +54,7 @@
 ;;; :not-empty is sugar for [:and [:!= ... nil] [:!= ... ""]]
 (doseq [op [:is-empty :not-empty]]
   (mbql-clause/define-tuple-mbql-clause op :- :type/Boolean
-    [:ref ::expression/string]))
+    [:ref ::expression/emptyable]))
 
 (def ^:private string-filter-options
   [:map [:case-sensitive {:optional true} :boolean]]) ; default true
@@ -97,7 +97,7 @@
   [:tuple
    [:= :segment]
    ::common/options
-   [:or ::common/int-greater-than-zero ::common/non-blank-string]])
+   [:or ::common/positive-int ::common/non-blank-string]])
 
 (mr/def ::operator
   [:map

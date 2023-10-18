@@ -1,7 +1,7 @@
 import { Route } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { within } from "@testing-library/react";
-import { Database } from "metabase-types/api";
+import type { Database } from "metabase-types/api";
 import {
   createMockDatabase,
   createMockField,
@@ -25,7 +25,7 @@ import {
 import {
   renderWithProviders,
   screen,
-  waitForElementToBeRemoved,
+  waitForLoaderToBeRemoved,
 } from "__support__/ui";
 import { getMetadataRoutes } from "../../routes";
 
@@ -120,7 +120,7 @@ const setup = async ({ databases = [SAMPLE_DB] }: SetupOpts = {}) => {
     { withRouter: true, initialRoute: "admin/datamodel" },
   );
 
-  await waitForElementToBeRemoved(() => screen.queryByText(/Loading/));
+  await waitForLoaderToBeRemoved();
 };
 
 describe("MetadataEditor", () => {

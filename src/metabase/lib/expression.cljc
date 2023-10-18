@@ -55,12 +55,13 @@
 
 (defmethod lib.metadata.calculation/metadata-method :expression
   [query stage-number [_expression opts expression-name, :as expression-ref-clause]]
-  {:lib/type        :metadata/column
-   :lib/source-uuid (:lib/uuid opts)
-   :name            expression-name
-   :display-name    (lib.metadata.calculation/display-name query stage-number expression-ref-clause)
-   :base-type       (lib.metadata.calculation/type-of query stage-number expression-ref-clause)
-   :lib/source      :source/expressions})
+  {:lib/type            :metadata/column
+   :lib/source-uuid     (:lib/uuid opts)
+   :name                expression-name
+   :lib/expression-name expression-name
+   :display-name        (lib.metadata.calculation/display-name query stage-number expression-ref-clause)
+   :base-type           (lib.metadata.calculation/type-of query stage-number expression-ref-clause)
+   :lib/source          :source/expressions})
 
 (defmethod lib.metadata.calculation/display-name-method :dispatch-type/integer
   [_query _stage-number n _style]
@@ -73,6 +74,10 @@
 (defmethod lib.metadata.calculation/display-name-method :dispatch-type/string
   [_query _stage-number s _style]
   (str \" s \"))
+
+(defmethod lib.metadata.calculation/display-name-method :dispatch-type/boolean
+  [_query _stage-number s _style]
+  (str s))
 
 (defmethod lib.metadata.calculation/display-name-method :expression
   [_query _stage-number [_expression _opts expression-name] _style]

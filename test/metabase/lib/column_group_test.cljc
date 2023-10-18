@@ -4,6 +4,7 @@
    [malli.core :as mc]
    [metabase.lib.column-group :as lib.column-group]
    [metabase.lib.core :as lib]
+   [metabase.lib.equality :as lib.equality]
    [metabase.lib.join :as lib.join]
    [metabase.lib.test-metadata :as meta]
    [metabase.lib.test-util :as lib.tu]
@@ -275,31 +276,78 @@
   (testing "#32509 when building a join against a Card"
     (doseq [{:keys [message card metadata-provider]}
             [{:message           "MBQL Card"
-              :card              lib.tu/categories-mbql-card
-              :metadata-provider lib.tu/metadata-provider-with-categories-mbql-card}
+              :card              (:categories lib.tu/mock-cards)
+              :metadata-provider lib.tu/metadata-provider-with-mock-cards}
              {:message           "Native Card"
-              :card              lib.tu/categories-native-card
-              :metadata-provider lib.tu/metadata-provider-with-categories-native-card}]]
+              :card              (lib.tu/mock-cards :categories/native)
+              :metadata-provider lib.tu/metadata-provider-with-mock-cards}]]
       (testing message
         (let [cols   (rhs-columns lib.tu/venues-query card)
               groups (lib/group-columns cols)]
           (testing `lib/group-columns
             (is (=? [{:lib/type                     :metadata/column-group
-                      :card-id                      1
+                      :card-id                      (:id card)
                       ::lib.column-group/group-type :group-type/join.explicit
-                      ::lib.column-group/columns    [{:name "ID", :lib/card-id 1}
-                                                     {:name "NAME", :lib/card-id 1}]}]
+                      ::lib.column-group/columns    [{:name "ID", :lib/card-id (:id card)}
+                                                     {:name "NAME", :lib/card-id (:id card)}]}]
                     groups)))
           (testing `lib/display-info
             (testing "Card is not present in MetadataProvider"
-              (is (=? [{:display-name "Saved Question 1"
+              (is (=? [{:display-name (str "Question " (:id card))
                         :is-from-join true}]
                       (for [group groups]
                         (lib/display-info lib.tu/venues-query group)))))
             (testing "Card *is* present in MetadataProvider"
               (let [query (assoc lib.tu/venues-query :lib/metadata metadata-provider)]
-                (is (=? [{:name         "Tarot Card"
-                          :display-name "Tarot Card"
+                (is (=? [{:name         "Mock categories card"
+                          :display-name "Mock Categories Card"
                           :is-from-join true}]
                         (for [group groups]
                           (lib/display-info query group))))))))))))
+
+(deftest ^:parallel self-join-grouping-test
+  (let [query        (-> (lib/query meta/metadata-provider (meta/table-metadata :orders))
+                         (lib/with-fields (for [field [:id :tax]]
+                                            (lib/ref (meta/field-metadata :orders field))))
+                         (lib/join (-> (lib/join-clause (meta/table-metadata :orders)
+                                                        [(lib/= (meta/field-metadata :orders :id)
+                                                                (meta/field-metadata :orders :id))])
+                                       (lib/with-join-fields (for [field [:id :tax]]
+                                                               (lib/ref (meta/field-metadata :orders field)))))))
+        columns      (lib/visible-columns query)
+        marked       (lib.equality/mark-selected-columns query -1 columns (lib/returned-columns query))
+        user-cols    ["ID" "ADDRESS" "EMAIL" "PASSWORD" "NAME" "CITY" "LONGITUDE"
+                      "STATE" "SOURCE" "BIRTH_DATE" "ZIP" "LATITUDE" "CREATED_AT"]
+        product-cols ["ID" "EAN" "TITLE" "CATEGORY" "VENDOR" "PRICE" "RATING" "CREATED_AT"]
+        implicit     (fn [field-names alias-prefix]
+                       {::lib.column-group/group-type :group-type/join.implicit
+                        :lib/type :metadata/column-group
+                        ::lib.column-group/columns
+                        (for [alias-suffix ["" "_2"]
+                              field-name   field-names]
+                          {:name                     field-name
+                           :lib/desired-column-alias (str alias-prefix field-name alias-suffix)
+                           :lib/source               :source/implicitly-joinable})})]
+    (is (= 60 (count columns)))
+    (is (= 4  (count (lib/returned-columns query))))
+    (is (= 60 (count marked)))
+    (is (= 4  (count (filter :selected? marked))))
+    (is (=? [{::lib.column-group/group-type :group-type/main
+              :lib/type :metadata/column-group
+              ::lib.column-group/columns
+              (for [field-name ["ID" "USER_ID" "PRODUCT_ID" "SUBTOTAL" "TAX"
+                                "TOTAL" "DISCOUNT" "CREATED_AT" "QUANTITY"]]
+                {:name field-name
+                 :lib/desired-column-alias field-name
+                 :lib/source :source/table-defaults})}
+             {::lib.column-group/group-type :group-type/join.explicit
+              :lib/type :metadata/column-group
+              ::lib.column-group/columns
+              (for [field-name ["ID" "USER_ID" "PRODUCT_ID" "SUBTOTAL" "TAX"
+                                "TOTAL" "DISCOUNT" "CREATED_AT" "QUANTITY"]]
+                {:name field-name
+                 :lib/desired-column-alias (str "Orders__" field-name)
+                 :lib/source :source/joins})}
+             (implicit user-cols    "PEOPLE__via__USER_ID__")
+             (implicit product-cols "PRODUCTS__via__PRODUCT_ID__")]
+            (lib/group-columns marked)))))

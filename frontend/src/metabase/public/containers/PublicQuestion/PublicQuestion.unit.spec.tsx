@@ -4,7 +4,8 @@ import { renderWithProviders, screen, within } from "__support__/ui";
 import {
   setupPublicCardQueryEndpoints,
   setupPublicQuestionEndpoints,
-} from "__support__/server-mocks/public";
+} from "__support__/server-mocks";
+import registerVisualizations from "metabase/visualizations/register";
 import { createMockState } from "metabase-types/store/mocks";
 import {
   createMockPublicCard,
@@ -12,6 +13,8 @@ import {
 } from "metabase-types/api/mocks";
 
 import { PublicQuestion } from "./PublicQuestion";
+
+registerVisualizations();
 
 const FAKE_UUID = "123456";
 

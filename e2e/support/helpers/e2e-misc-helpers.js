@@ -45,7 +45,7 @@ export function openNativeEditor({
  */
 export function runNativeQuery({ wait = true } = {}) {
   cy.intercept("POST", "api/dataset").as("dataset");
-  cy.get(".NativeQueryEditor .Icon-play").click();
+  cy.findByTestId("native-query-editor-container").icon("play").click();
 
   if (wait) {
     cy.wait("@dataset");
@@ -257,7 +257,9 @@ export function saveQuestion(
   cy.findByText("Save").click();
 
   modal().within(() => {
-    cy.findByLabelText("Name").clear().type(name);
+    if (name) {
+      cy.findByLabelText("Name").clear().type(name);
+    }
     cy.button("Save").click();
   });
 
@@ -270,6 +272,16 @@ export function saveQuestion(
   modal().within(() => {
     cy.button("Not now").click();
   });
+}
+
+export function saveSavedQuestion() {
+  cy.intercept("PUT", "/api/card/**").as("updateQuestion");
+  cy.findByText("Save").click();
+
+  modal().within(() => {
+    cy.button("Save").click();
+  });
+  cy.wait("@updateQuestion");
 }
 
 export function visitPublicQuestion(id) {

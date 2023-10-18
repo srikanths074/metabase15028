@@ -6,13 +6,34 @@ import {
   openNativeEditor,
   rightSidebar,
   setTokenFeatures,
+  isOSS,
 } from "e2e/support/helpers";
 
 import { USER_GROUPS } from "e2e/support/cypress_data";
 
 const { ALL_USERS_GROUP } = USER_GROUPS;
 
-describeEE("scenarios > question > snippets", () => {
+describe("scenarios > question > snippets (OSS)", { tags: "@OSS" }, () => {
+  beforeEach(() => {
+    cy.onlyOn(isOSS);
+    restore();
+  });
+
+  it("should display nested snippets in a flat list", () => {
+    createNestedSnippet();
+
+    // Open editor and sidebar
+    openNativeEditor();
+    cy.icon("snippet").click();
+
+    // Confirm snippet is not in folder
+    rightSidebar().within(() => {
+      cy.findByText("snippet 1").should("be.visible");
+    });
+  });
+});
+
+describeEE("scenarios > question > snippets (EE)", () => {
   beforeEach(() => {
     restore();
     cy.signInAsAdmin();
@@ -57,8 +78,6 @@ describeEE("scenarios > question > snippets", () => {
       name: "snippet 1",
       collection_id: null,
     });
-
-    cy.intercept("GET", "api/collection/*").as("collection");
 
     openNativeEditor();
 
@@ -109,6 +128,20 @@ describeEE("scenarios > question > snippets", () => {
     cy.findByText("snippet 1");
   });
 
+  it("should display nested snippets in their folder", () => {
+    createNestedSnippet();
+
+    // Open editor and sidebar
+    openNativeEditor();
+    cy.icon("snippet").click();
+
+    // Confirm snippet is in folder
+    rightSidebar().within(() => {
+      cy.findByText("Snippet Folder").click();
+      cy.findByText("snippet 1").click();
+    });
+  });
+
   describe("existing snippet folder", () => {
     beforeEach(() => {
       cy.intercept("GET", "/api/collection/root").as("collections");
@@ -118,7 +151,6 @@ describeEE("scenarios > question > snippets", () => {
       cy.request("POST", "/api/collection", {
         name: "Snippet Folder",
         description: null,
-        color: "#509EE3",
         parent_id: null,
         namespace: "snippets",
       });
@@ -182,6 +214,24 @@ describeEE("scenarios > question > snippets", () => {
     });
   });
 });
+
+function createNestedSnippet() {
+  cy.signInAsAdmin();
+  // Create snippet folder via API
+  cy.request("POST", "/api/collection", {
+    name: "Snippet Folder",
+    description: null,
+    parent_id: null,
+    namespace: "snippets",
+  }).then(({ body: { id } }) => {
+    // Create snippet in folder via API
+    cy.request("POST", "/api/native-query-snippet", {
+      content: "snippet 1",
+      name: "snippet 1",
+      collection_id: id,
+    });
+  });
+}
 
 function getPermissionsForUserGroup(userGroup) {
   return cy

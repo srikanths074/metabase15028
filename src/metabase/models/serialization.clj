@@ -9,24 +9,23 @@
 
   If the model is not exported, add it to the exclusion lists in the tests. Every model should be explicitly listed as
   exported or not, and a test enforces this so serialization isn't forgotten for new models."
+  (:refer-clojure :exclude [descendants])
   (:require
    [cheshire.core :as json]
    [clojure.core.match :refer [match]]
    [clojure.set :as set]
    [clojure.string :as str]
    [medley.core :as m]
+   [metabase.lib.schema.id :as lib.schema.id]
    [metabase.mbql.normalize :as mbql.normalize]
-   [metabase.mbql.schema :as mbql.s]
    [metabase.mbql.util :as mbql.u]
    [metabase.models.interface :as mi]
    [metabase.shared.models.visualization-settings :as mb.viz]
    [metabase.util :as u]
    [metabase.util.i18n :refer [trs]]
    [metabase.util.log :as log]
-   [toucan.db :as db]
    [toucan2.core :as t2]
-   [toucan2.model :as t2.model])
-  (:refer-clojure :exclude [descendants]))
+   [toucan2.model :as t2.model]))
 
 (set! *warn-on-reflection* true)
 
@@ -177,15 +176,15 @@
   [model {:keys [collection-set]}]
   (if collection-set
     ;; If collection-set is defined, select everything in those collections, or with nil :collection_id.
-    (let [in-colls  (db/select-reducible model :collection_id [:in collection-set])]
+    (let [in-colls  (t2/reducible-select model :collection_id [:in collection-set])]
       (if (contains? collection-set nil)
-        (eduction cat [in-colls (db/select-reducible model :collection_id nil)])
+        (eduction cat [in-colls (t2/reducible-select model :collection_id nil)])
         in-colls))
     ;; If collection-set is nil, just select everything.
-    (db/select-reducible model)))
+    (t2/reducible-select model)))
 
 (defmethod extract-query :default [model-name _]
-  (db/select-reducible (symbol model-name)))
+  (t2/reducible-select (symbol model-name)))
 
 (defn extract-one-basics
   "A helper for writing [[extract-one]] implementations. It takes care of the basics:
@@ -263,7 +262,7 @@
 
 (defmulti load-xform
   "Given the incoming vanilla map as ingested, transform it so it's suitable for sending to the database (in eg.
-  [[db/insert!]]).
+  [[t2/insert!]]).
   For example, this should convert any foreign keys back from a portable entity ID or identity hash into a numeric
   database ID. This is the mirror of [[extract-one]], in spirit. (They're not strictly inverses - [[extract-one]] drops
   the primary key but this need not put one back, for example.)
@@ -352,7 +351,6 @@
         (load-insert! model adjusted)
         (load-update! model adjusted maybe-local)))))
 
-
 (defn entity-id?
   "Checks if the given string is a 21-character NanoID. Useful for telling entity IDs apart from identity hashes."
   [id-str]
@@ -366,7 +364,7 @@
   ;; TODO This should be able to use a cache of identity-hash values from the start of the deserialization process.
   ;; Note that it needs to include either updates (or worst-case, invalidation) at [[load-one!]] time.
   [model id-hash]
-  (->> (db/select-reducible model)
+  (->> (t2/reducible-select model)
        (into [] (comp (filter #(= id-hash (identity-hash %)))
                       (take 1)))
        first))
@@ -651,7 +649,7 @@
                   map?
                   (as-> &match entity
                     (m/update-existing entity :database (fn [db-id]
-                                                          (if (= db-id mbql.s/saved-questions-virtual-database-id)
+                                                          (if (= db-id lib.schema.id/saved-questions-virtual-database-id)
                                                             "database/__virtual"
                                                             (t2/select-one-fn :name 'Database :id db-id))))
                     (m/update-existing entity :card_id #(*export-fk* % 'Card)) ; attibutes that refer to db fields use _
@@ -708,7 +706,7 @@
                   {:database (fully-qualified-name :guard string?)}
                   (-> &match
                       (assoc :database (if (= fully-qualified-name "database/__virtual")
-                                         mbql.s/saved-questions-virtual-database-id
+                                         lib.schema.id/saved-questions-virtual-database-id
                                          (t2/select-one-pk 'Database :name fully-qualified-name)))
                       mbql-fully-qualified-names->ids*) ; Process other keys
 
@@ -981,7 +979,7 @@
         link-card-deps      (viz-link-card-deps viz)]
     (->> (concat vis-column-settings [(mbql-deps viz) link-card-deps])
          (filter some?)
-         (reduce set/union))))
+         (reduce set/union #{}))))
 
 (defmacro with-cache
   "Runs body with all functions marked with ::cache re-bound to memoized versions for performance."
