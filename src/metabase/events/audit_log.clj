@@ -5,10 +5,18 @@
    [metabase.api.common :as api]
    [metabase.events :as events]
    [metabase.models.audit-log :as audit-log]
+   [metabase.public-settings.premium-features :as premium-features]
    [methodical.core :as methodical]
    [toucan2.core :as t2]))
 
 (derive ::event :metabase/event)
+
+(methodical/defmethod events/publish-event! :around ::event
+  [topic card]
+  (when (or (premium-features/enable-audit-app?)
+            ;; Cloud Starters won't have the Audit App enabled, but we want to log events in case they upgrade to premium
+            (premium-features/is-hosted?))
+    (next-method topic card)))
 
 (defn maybe-prepare-update-event-data
   "When `:audit-db/previous` is present in the event-data, we return a map with previous and new versions of the
