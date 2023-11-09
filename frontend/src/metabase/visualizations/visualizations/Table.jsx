@@ -152,7 +152,7 @@ export default class Table extends Component {
     ...buildTableColumnSettings(),
     "table.column_widths": {},
     [DataGrid.COLUMN_FORMATTING_SETTING]: {
-      section: t`Conditional Formatting`,
+      section: t`Conditional formatting`,
       widget: ChartSettingsTableFormatting,
       default: [],
       getProps: (series, settings) => ({

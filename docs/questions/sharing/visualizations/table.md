@@ -46,7 +46,7 @@ Currency columns have all the same options as numbers, plus the following:
 
 ### Conditional table formatting
 
-Sometimes it's helpful to highlight certain rows or columns in your tables when they meet a specific condition. You can set up conditional formatting rules by going to the visualization settings while looking at any table, then clicking on the **Conditional Formatting** tab.
+Sometimes it's helpful to highlight certain rows or columns in your tables when they meet a specific condition. You can set up conditional formatting rules by going to the visualization settings while looking at any table, then clicking on the **Conditional formatting** tab.
 
 ![Conditional formatting](../../images/conditional-formatting.png)
 
