@@ -9,20 +9,11 @@ import {
   ChartSettingsError,
   MinRowsError,
 } from "metabase/visualizations/lib/errors";
-import {
-  getFriendlyName,
-  computeMaxDecimalsForValues,
-} from "metabase/visualizations/lib/utils";
-import {
-  metricSetting,
-  dimensionSetting,
-} from "metabase/visualizations/lib/settings/utils";
-import { columnSettings } from "metabase/visualizations/lib/settings/column";
+import { getFriendlyName } from "metabase/visualizations/lib/utils";
 
 import { formatValue } from "metabase/lib/formatting";
 
 import { color } from "metabase/lib/colors";
-import { getColorsForValues } from "metabase/lib/colors/charts";
 import {
   getDefaultSize,
   getMinSize,
@@ -31,7 +22,17 @@ import ChartWithLegend from "../../components/ChartWithLegend";
 import styles from "./PieChart.css";
 
 import { PieArc } from "./PieArc";
-import { getTooltipModel } from "./utils";
+import {
+  computeLabelDecimals,
+  computeLegendDecimals,
+  formatPercent,
+  getTooltipModel,
+} from "./utils";
+import {
+  PIE_CHART_SETTINGS,
+  DEFAULT_SLICE_THRESHOLD,
+  OTHER_SLICE_MIN_PERCENTAGE,
+} from "./constants";
 
 const SIDE_PADDING = 24;
 const MAX_LABEL_FONT_SIZE = 20;
@@ -41,8 +42,6 @@ const MAX_PIE_SIZE = 550;
 const INNER_RADIUS_RATIO = 3 / 5;
 
 const PAD_ANGLE = (Math.PI / 180) * 1; // 1 degree in radians
-const SLICE_THRESHOLD = 0.025; // approx 1 degree in percentage
-const OTHER_SLICE_MIN_PERCENTAGE = 0.003;
 
 export default class PieChart extends Component {
   constructor(props) {
@@ -108,143 +107,7 @@ export default class PieChart extends Component {
     },
   ];
 
-  static settings = {
-    ...columnSettings({ hidden: true }),
-    ...dimensionSetting("pie.dimension", {
-      section: t`Data`,
-      title: t`Dimension`,
-      showColumnSetting: true,
-    }),
-    ...metricSetting("pie.metric", {
-      section: t`Data`,
-      title: t`Measure`,
-      showColumnSetting: true,
-    }),
-    "pie.show_legend": {
-      section: t`Display`,
-      title: t`Show legend`,
-      widget: "toggle",
-      default: true,
-      inline: true,
-      marginBottom: "1rem",
-    },
-    "pie.show_total": {
-      section: t`Display`,
-      title: t`Show total`,
-      widget: "toggle",
-      default: true,
-      inline: true,
-    },
-    "pie.percent_visibility": {
-      section: t`Display`,
-      title: t`Show percentages`,
-      widget: "radio",
-      default: "legend",
-      props: {
-        options: [
-          { name: t`Off`, value: "off" },
-          { name: t`In legend`, value: "legend" },
-          { name: t`On the chart`, value: "inside" },
-        ],
-      },
-    },
-    "pie.slice_threshold": {
-      section: t`Display`,
-      title: t`Minimum slice percentage`,
-      widget: "number",
-      default: SLICE_THRESHOLD * 100,
-    },
-    "pie.colors": {
-      section: t`Display`,
-      title: t`Colors`,
-      widget: "colors",
-      getDefault: (series, settings) =>
-        settings["pie._dimensionValues"]
-          ? getColorsForValues(settings["pie._dimensionValues"])
-          : [],
-      getProps: (series, settings) => ({
-        seriesValues: settings["pie._dimensionValues"] || [],
-        seriesTitles: settings["pie._dimensionTitles"] || [],
-      }),
-      getDisabled: (series, settings) => !settings["pie._dimensionValues"],
-      readDependencies: ["pie._dimensionValues", "pie._dimensionTitles"],
-    },
-    // this setting recomputes color assignment using pie.colors as the existing
-    // assignments in case the user previous modified pie.colors and a new value
-    // has appeared. Not ideal because those color values will be missing in the
-    // settings UI
-    "pie._colors": {
-      getValue: (series, settings) =>
-        getColorsForValues(
-          settings["pie._dimensionValues"],
-          settings["pie.colors"],
-        ),
-      readDependencies: ["pie._dimensionValues", "pie.colors"],
-    },
-    "pie._metricIndex": {
-      getValue: (
-        [
-          {
-            data: { cols },
-          },
-        ],
-        settings,
-      ) => _.findIndex(cols, col => col.name === settings["pie.metric"]),
-      readDependencies: ["pie.metric"],
-    },
-    "pie._dimensionIndex": {
-      getValue: (
-        [
-          {
-            data: { cols },
-          },
-        ],
-        settings,
-      ) => _.findIndex(cols, col => col.name === settings["pie.dimension"]),
-      readDependencies: ["pie.dimension"],
-    },
-    "pie._dimensionValues": {
-      getValue: (
-        [
-          {
-            data: { rows },
-          },
-        ],
-        settings,
-      ) => {
-        const dimensionIndex = settings["pie._dimensionIndex"];
-        if (dimensionIndex == null || dimensionIndex < 0) {
-          return null;
-        }
-
-        return rows.map(row => String(row[dimensionIndex]));
-      },
-      readDependencies: ["pie._dimensionIndex"],
-    },
-    "pie._dimensionTitles": {
-      getValue: (
-        [
-          {
-            data: { rows, cols },
-          },
-        ],
-        settings,
-      ) => {
-        const dimensionIndex = settings["pie._dimensionIndex"];
-        if (dimensionIndex == null || dimensionIndex < 0) {
-          return null;
-        }
-
-        return rows.map(row =>
-          formatValue(
-            row[dimensionIndex],
-            settings.column(cols[dimensionIndex]),
-          ),
-        );
-      },
-      readDependencies: ["pie._dimensionIndex"],
-    },
-  };
+  static settings = PIE_CHART_SETTINGS;
 
   updateChartViewportSize = () => {
     // Measure chart viewport dimensions in the next tick to wait for DOM elements to resize
@@ -335,7 +198,7 @@ export default class PieChart extends Component {
     const sliceThreshold =
       typeof settings["pie.slice_threshold"] === "number"
         ? settings["pie.slice_threshold"] / 100
-        : SLICE_THRESHOLD;
+        : DEFAULT_SLICE_THRESHOLD;
 
     const [slices, others] = _.chain(rows)
       .map((row, index) => ({
@@ -371,29 +234,18 @@ export default class PieChart extends Component {
     }
 
     const percentages = slices.map(s => s.percentage);
-    const legendDecimals = computeMaxDecimalsForValues(percentages, {
-      style: "percent",
-      maximumSignificantDigits: 3,
-    });
-    const labelsDecimals = computeMaxDecimalsForValues(percentages, {
-      style: "percent",
-      maximumSignificantDigits: 2,
-    });
-
-    const formatPercent = (percent, decimals) =>
-      formatValue(percent, {
-        column: cols[metricIndex],
-        number_separators: settings.column(cols[metricIndex]).number_separators,
-        jsx: true,
-        majorWidth: 0,
-        number_style: "percent",
-        decimals,
-      });
+    const legendDecimals = computeLegendDecimals({ percentages });
+    const labelsDecimals = computeLabelDecimals({ percentages });
 
     const legendTitles = slices.map(slice => [
       slice.key === "Other" ? slice.key : formatDimension(slice.key, true),
       settings["pie.percent_visibility"] === "legend"
-        ? formatPercent(slice.percentage, legendDecimals)
+        ? formatPercent({
+            percent: slice.percentage,
+            decimals: legendDecimals,
+            settings,
+            cols,
+          })
         : undefined,
     ]);
     const legendColors = slices.map(slice => slice.color);
@@ -564,10 +416,12 @@ export default class PieChart extends Component {
                 transform={`translate(${outerRadius},${outerRadius})`}
               >
                 {pie(slices).map((slice, index) => {
-                  const label = formatPercent(
-                    slice.data.percentage,
-                    labelsDecimals,
-                  );
+                  const label = formatPercent({
+                    percent: slice.data.percentage,
+                    decimals: labelsDecimals,
+                    settings,
+                    cols,
+                  });
 
                   return (
                     <PieArc
