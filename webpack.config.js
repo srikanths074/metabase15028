@@ -11,6 +11,8 @@ const TerserPlugin = require("terser-webpack-plugin");
 const WebpackNotifierPlugin = require("webpack-notifier");
 const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
 
+const { EsbuildPlugin } = require('esbuild-loader')
+
 const fs = require("fs");
 
 const ASSETS_PATH = __dirname + "/resources/frontend_client/app/assets";
@@ -75,9 +77,10 @@ const config = (module.exports = {
   module: {
     rules: [
       {
-        test: /\.(tsx?|jsx?)$/,
+        test: /\.[jt]sx?$/,
         exclude: /node_modules|cljs/,
-        use: [{ loader: "babel-loader", options: BABEL_CONFIG }],
+        use: [{ loader: "esbuild-loader", options: {
+        } }],
       },
       ...(shouldUseEslint
         ? [
@@ -199,11 +202,10 @@ const config = (module.exports = {
       },
     },
     minimizer: [
-      new TerserPlugin({
-        minify: TerserPlugin.swcMinify,
-        parallel: true,
-        test: /\.(tsx?|jsx?)($|\?)/i,
-      }),
+      new EsbuildPlugin({
+        target: 'es2015',  // Syntax to transpile to (see options below for possible values)
+        css: true
+      })
     ],
   },
 
@@ -347,5 +349,5 @@ if (WEBPACK_BUNDLE !== "production") {
     }),
   );
 } else {
-  config.devtool = "source-map";
+  // config.devtool = "source-map";
 }
