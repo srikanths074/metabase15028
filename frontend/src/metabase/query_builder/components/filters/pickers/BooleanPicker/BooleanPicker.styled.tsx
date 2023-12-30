@@ -3,7 +3,6 @@ import styled from "@emotion/styled";
 import { t } from "ttag";
 
 import { color } from "metabase/lib/colors";
-import { space } from "metabase/styled-components/theme";
 import Button from "metabase/core/components/Button";
 import Radio from "metabase/core/components/Radio";
 
@@ -27,7 +26,7 @@ export const CheckboxContainer = styled.div`
 `;
 
 const ToggleButton = styled(Button)`
-  margin-left: ${space(0)};
+  padding: 0.5rem 0;
   color: ${color("text-medium")};
   border: none;
   background-color: transparent;
