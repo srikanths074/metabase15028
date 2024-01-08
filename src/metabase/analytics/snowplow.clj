@@ -8,9 +8,9 @@
    [metabase.models.setting :as setting :refer [defsetting Setting]]
    [metabase.models.user :refer [User]]
    [metabase.public-settings :as public-settings]
-   [metabase.util.date-2 :as u.date]
    [metabase.util.i18n :refer [deferred-tru trs]]
    [metabase.util.log :as log]
+   [second-date.core :as u.date]
    [toucan2.core :as t2])
   (:import
    (com.snowplowanalytics.snowplow.tracker Snowplow Subject Tracker)

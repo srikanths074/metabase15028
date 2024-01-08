@@ -21,7 +21,6 @@
    [metabase.query-processor.timezone :as qp.timezone]
    [metabase.query-processor.util.add-alias-info :as add]
    [metabase.util :as u]
-   [metabase.util.date-2 :as u.date]
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
@@ -30,7 +29,8 @@
                              $dayOfMonth $dayOfWeek $dayOfYear $divide $eq $expr
                              $group $gt $gte $hour $limit $literal $lookup $lt $lte $match $max $min $minute
                              $mod $month $multiply $ne $not $or $project $regexMatch $second $size $skip $sort
-                             $strcasecmp $subtract $sum $toLower $unwind $year]])
+                             $strcasecmp $subtract $sum $toLower $unwind $year]]
+   [second-date.core :as u.date])
   (:import
    (org.bson BsonBinarySubType)
    (org.bson.types Binary ObjectId)))
@@ -431,9 +431,9 @@
                      java.time.OffsetDateTime (t/offset-date-time t report-zone)
                      java.time.ZonedDateTime  (t/offset-date-time t report-zone))]
     (letfn [(extract [unit]
-              (u.date/extract t unit))
+              (u.date/extract t unit {:first-day-of-week (public-settings/start-of-week)}))
             (bucket [unit]
-              ($date-from-string (u.date/bucket t unit)))]
+              ($date-from-string (u.date/bucket t unit {:first-day-of-week (public-settings/start-of-week)})))]
       (case (or unit :default)
         :default         ($date-from-string t)
         :minute          (bucket :minute)
@@ -463,7 +463,7 @@
         t
         (-> t
             (u.date/add unit amount)
-            (u.date/bucket unit)))))))
+            (u.date/bucket unit {:first-day-of-week (public-settings/start-of-week)})))))))
 
 ;;; ---------------------------------------------------- functions ---------------------------------------------------
 
