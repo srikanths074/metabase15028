@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { t } from "ttag";
 
@@ -63,6 +63,8 @@ export function Heading({
   const hasContent = !isEmpty(settings.text);
   const placeholder = t`Heading`;
 
+  const [text, setText] = useState(hasContent ? settings.text : "");
+
   if (isEditing) {
     return (
       <InputContainer
@@ -84,11 +86,14 @@ export function Heading({
             name="heading"
             data-testid="editing-dashboard-heading-input"
             placeholder={placeholder}
-            value={settings.text}
+            value={content}
             autoFocus={justAdded || isFocused}
-            onChange={e => handleTextChange(e.target.value)}
+            onChange={e => setText(e.target.value)}
             onMouseDown={preventDragging}
-            onBlur={toggleFocusOff}
+            onBlur={() => {
+              handleTextChange(text);
+              toggleFocusOff();
+            }}
           />
         )}
       </InputContainer>
