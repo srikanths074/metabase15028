@@ -182,7 +182,7 @@ export default class EmailAttachmentPicker extends Component {
     const { isEnabled, selectedAttachmentType, selectedCardIds } = this.state;
 
     return (
-      <div>
+      <>
         <Toggle
           aria-label={t`Attach results`}
           value={isEnabled}
@@ -190,7 +190,7 @@ export default class EmailAttachmentPicker extends Component {
         />
 
         {isEnabled && (
-          <div>
+          <div className="pt1 flex-full">
             <div className="my1 flex justify-between">
               <Label className="pt1">{t`File format`}</Label>
               <SegmentedControl
@@ -235,7 +235,7 @@ export default class EmailAttachmentPicker extends Component {
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 }
