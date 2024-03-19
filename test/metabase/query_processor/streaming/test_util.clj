@@ -58,7 +58,7 @@
   (with-open [bos (ByteArrayOutputStream.)
               os  (BufferedOutputStream. bos)]
     (qp.streaming/do-with-streaming-rff
-     export-format os
+     export-format os {}
      (fn [rff]
        (binding [qp.pipeline/*query-timeout-ms* (u/seconds->ms 15)]
          (is (=? {:status :completed}
