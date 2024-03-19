@@ -1,3 +1,4 @@
+import { modal } from "e2e/support/helpers/e2e-ui-elements-helpers";
 // Find a text field by label text, type it in, then blur the field.
 // Commonly used in our Admin section as we auto-save settings.
 export function typeAndBlurUsingLabel(label, value) {
@@ -32,6 +33,8 @@ export function openNativeEditor({
   }
   cy.findByText("New").click();
   cy.findByText(newMenuItemTitle).click();
+
+  cy.url().should("include", "/question");
 
   databaseName && cy.findByText(databaseName).click();
 

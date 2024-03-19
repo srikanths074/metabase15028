@@ -11,9 +11,26 @@ const MAX_RETRIES = 10;
 // eslint-disable-next-line no-literal-metabase-strings -- Not a user facing string
 const ANTI_CSRF_HEADER = "X-Metabase-Anti-CSRF-Token";
 
-let ANTI_CSRF_TOKEN = null;
+let ANTI_CSRF_TOKEN: string | null = null;
 
-const DEFAULT_OPTIONS = {
+type RequestOptions = {
+  json: boolean;
+  hasBody: boolean;
+  noEvent: boolean;
+  transformResponse: (response: any, options: any) => any;
+  raw: any;
+  headers: Record<string, string>;
+  retry: boolean;
+  retryCount: number;
+  retryDelayIntervals: number[];
+  bodyParamName?: string;
+  formData?: boolean;
+  cancelled?: Promise<unknown>;
+};
+
+type RequestMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+const DEFAULT_OPTIONS: RequestOptions = {
   json: true,
   hasBody: false,
   noEvent: false,
@@ -45,20 +62,29 @@ export class Api extends EventEmitter {
     this.PUT = this._makeMethod("PUT", { hasBody: true });
   }
 
-  _makeMethod(method, creatorOptions = {}) {
-    return (urlTemplate, methodOptions = {}) => {
+  _makeMethod(
+    method: RequestMethod,
+    creatorOptions: Partial<RequestOptions> = {},
+  ) {
+    return (urlTemplate: string, methodOptions = {}) => {
       if (typeof methodOptions === "function") {
         methodOptions = { transformResponse: methodOptions };
       }
 
-      const defaultOptions = {
+      const defaultOptions: RequestOptions = {
         ...DEFAULT_OPTIONS,
         ...creatorOptions,
         ...methodOptions,
       };
 
-      return async (rawData, invocationOptions = {}) => {
-        const options = { ...defaultOptions, ...invocationOptions };
+      return async (
+        rawData?: any,
+        invocationOptions: Partial<RequestOptions> = {},
+      ) => {
+        const options: RequestOptions = {
+          ...defaultOptions,
+          ...invocationOptions,
+        };
         let url = urlTemplate;
         const data = { ...rawData };
         for (const tag of url.match(/:\w+/g) || []) {
@@ -81,11 +107,11 @@ export class Api extends EventEmitter {
           }
         }
 
-        const headers = options.json
+        const headers: RequestOptions["headers"] = options.json
           ? { Accept: "application/json", "Content-Type": "application/json" }
           : {};
 
-        if (options.formData && options.fetch) {
+        if (options.formData) {
           delete headers["Content-Type"];
         }
 
@@ -132,8 +158,15 @@ export class Api extends EventEmitter {
     };
   }
 
-  async _makeRequestWithRetries(method, url, headers, body, data, options) {
-    // Get a copy of the delay intervals that we can pop items from as we retry
+  async _makeRequestWithRetries(
+    method: RequestMethod,
+    url: string,
+    headers: RequestOptions["headers"],
+    body: any,
+    data: any,
+    options: RequestOptions,
+  ) {
+    // Get a copy of the delay intervals that we can remove items from as we retry
     const retryDelays = options.retryDelayIntervals.slice().reverse();
     let retryCount = 0;
     // maxAttempts is the first attempt followed by the number of retries
@@ -149,12 +182,12 @@ export class Api extends EventEmitter {
           data,
           options,
         );
-      } catch (e) {
+      } catch (e: any) {
         retryCount++;
         // If the response is 503 and the next retry won't put us over the maxAttempts,
         // wait a bit and try again
         if (e.status === 503 && retryCount < maxAttempts) {
-          await delay(retryDelays.pop());
+          await delay(retryDelays.pop() ?? 100);
         } else {
           throw e;
         }
@@ -162,78 +195,31 @@ export class Api extends EventEmitter {
     } while (retryCount < maxAttempts);
   }
 
-  _makeRequest(...args) {
-    const options = args[5];
-    // this is temporary to not deal with failed cypress tests
-    // we should switch to using fetch in all cases (metabase#28489)
-    if (isTest || options.fetch) {
-      return this._makeRequestWithFetch(...args);
-    } else {
-      return this._makeRequestWithXhr(...args);
-    }
-  }
-
-  _makeRequestWithXhr(method, url, headers, body, data, options) {
-    return new Promise((resolve, reject) => {
-      let isCancelled = false;
-      const xhr = new XMLHttpRequest();
-      xhr.open(method, this.basename + url);
-      for (const headerName in headers) {
-        xhr.setRequestHeader(headerName, headers[headerName]);
-      }
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-          // getResponseHeader() is case-insensitive
-          const antiCsrfToken = xhr.getResponseHeader(ANTI_CSRF_HEADER);
-          if (antiCsrfToken) {
-            ANTI_CSRF_TOKEN = antiCsrfToken;
-          }
-
-          let body = xhr.responseText;
-          if (options.json) {
-            try {
-              body = JSON.parse(body);
-            } catch (e) {}
-          }
-          let status = xhr.status;
-          if (status === 202 && body && body._status > 0) {
-            status = body._status;
-          }
-          if (status >= 200 && status <= 299) {
-            if (options.transformResponse) {
-              body = options.transformResponse(body, { data });
-            }
-            resolve(body);
-          } else {
-            reject({
-              status: status,
-              data: body,
-              isCancelled: isCancelled,
-            });
-          }
-          if (!options.noEvent) {
-            this.emit(status, url);
-          }
-        }
-      };
-      xhr.send(body);
-
-      if (options.cancelled) {
-        options.cancelled.then(() => {
-          isCancelled = true;
-          xhr.abort();
-        });
-      }
-    });
+  _makeRequest(
+    method: RequestMethod,
+    url: string,
+    headers: RequestOptions["headers"],
+    requestBody: any,
+    data: any,
+    options: RequestOptions,
+  ) {
+    return this._makeRequestWithFetch(
+      method,
+      url,
+      headers,
+      requestBody,
+      data,
+      options,
+    );
   }
 
   async _makeRequestWithFetch(
-    method,
-    url,
-    headers,
-    requestBody,
-    data,
-    options,
+    method: RequestMethod,
+    url: string,
+    headers: RequestOptions["headers"],
+    requestBody: any,
+    data: any,
+    options: RequestOptions,
   ) {
     const controller = options.controller || new AbortController();
     options.cancelled?.then(() => controller.abort());
@@ -248,7 +234,7 @@ export class Api extends EventEmitter {
 
     return fetch(request)
       .then(response => {
-        return response.text().then(body => {
+        return response.text().then((body: any) => {
           if (options.json) {
             try {
               body = JSON.parse(body);
@@ -256,7 +242,7 @@ export class Api extends EventEmitter {
           }
 
           let status = response.status;
-          if (status === 202 && body && body._status > 0) {
+          if (status === 202 && body?._status > 0) {
             status = body._status;
           }
 
@@ -266,6 +252,7 @@ export class Api extends EventEmitter {
           }
 
           if (!options.noEvent) {
+            // @ts-expect-error related to constructor error above
             this.emit(status, url);
           }
 
@@ -285,11 +272,12 @@ export class Api extends EventEmitter {
         } else {
           throw error;
         }
-      });
+      }) as any;
   }
 }
 
 const instance = new Api();
 
+// eslint-disable-next-line import/no-default-export
 export default instance;
 export const { GET, POST, PUT, DELETE } = instance;
