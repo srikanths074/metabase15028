@@ -446,25 +446,40 @@
           " select"
           "   NULL as role,"
           "   t.schemaname as schema,"
-          "   t.objectname as table,"
+          "   t.tablename as table,"
           ;; if `has_table_privilege` is true `has_any_column_privilege` is false and vice versa, so we have to check both.
-          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\".\"' || t.objectname || '\"',  'SELECT')"
-          "     OR pg_catalog.has_any_column_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.objectname || '\"',  'SELECT') as select,"
-          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.objectname || '\"',  'UPDATE')"
-          "     OR pg_catalog.has_any_column_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.objectname || '\"',  'UPDATE') as update,"
-          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.objectname || '\"',  'INSERT') as insert,"
-          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.objectname || '\"',  'DELETE') as delete"
-          " from ("
-          "   select schemaname, tablename as objectname from pg_catalog.pg_tables"
-          "   union"
-          "   select schemaname, viewname as objectname from pg_views"
-          " ) t"
-          " where t.schemaname !~ '^pg_'"
-          "   and t.schemaname <> 'information_schema'"
+          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\".\"' || t.tablename || '\"',  'SELECT')"
+          "     OR pg_catalog.has_any_column_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.tablename || '\"',  'SELECT') as select,"
+          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.tablename || '\"',  'UPDATE')"
+          "     OR pg_catalog.has_any_column_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.tablename || '\"',  'UPDATE') as update,"
+          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.tablename || '\"',  'INSERT') as insert,"
+          "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.tablename || '\"',  'DELETE') as delete"
+          " from pg_catalog.pg_tables t"
+          " where t.schemaname !~ '^information_schema|catalog_history|pg_'"
           "   and pg_catalog.has_schema_privilege(current_user, t.schemaname, 'USAGE')"
           ")"
-          "select t.*"
-          "from table_privileges t"]))
+          "select * from table_privileges"]))
+       (concat (jdbc/query
+                conn-spec
+                (str/join
+                 "\n"
+                 ["with table_privileges as ("
+                  " select"
+                  "   NULL as role,"
+                  "   t.schemaname as schema,"
+                  "   t.viewname as table,"
+                         ;; if `has_table_privilege` is true `has_any_column_privilege` is false and vice versa, so we have to check both.
+                  "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\".\"' || t.viewname || '\"',  'SELECT')"
+                  "     OR pg_catalog.has_any_column_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.viewname || '\"',  'SELECT') as select,"
+                  "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.viewname || '\"',  'UPDATE')"
+                  "     OR pg_catalog.has_any_column_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.viewname || '\"',  'UPDATE') as update,"
+                  "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.viewname || '\"',  'INSERT') as insert,"
+                  "   pg_catalog.has_table_privilege(current_user, '\"' || t.schemaname || '\"' || '.' || '\"' || t.viewname || '\"',  'DELETE') as delete"
+                  " from pg_catalog.pg_views t"
+                  " where t.schemaname !~ '^information_schema|catalog_history|pg_'"
+                  "   and pg_catalog.has_schema_privilege(current_user, t.schemaname, 'USAGE')"
+                  ")"
+                  "select * from table_privileges"])))
        (filter #(or (:select %) (:update %) (:delete %) (:update %)))))
 
 
@@ -481,3 +496,10 @@
 (defmethod driver.sql/default-database-role :redshift
   [_ _]
   "DEFAULT")
+
+(defmethod driver/add-columns! :redshift
+  [driver db-id table-name column-definitions & {:as settings}]
+  ;; Redshift doesn't support adding multiple columns at a time, so we break it up into individual ALTER TABLE ADD COLUMN statements
+  (let [f (get-method driver/add-columns! :sql-jdbc)]
+    (doseq [[k v] column-definitions]
+      (f driver db-id table-name {k v} settings))))
