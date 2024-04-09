@@ -35,7 +35,7 @@
   (lib.util.match/match (mbql.normalize/normalize mbql) [:dimension dimension & _] dimension))
 
 (def ^:private ^{:arglists '([m])} stringify-keys
-  (partial m/map-keys name))
+  #(update-keys % name))
 
 (def ^:private Dimension->MBQL
   [:map-of

@@ -148,7 +148,7 @@
   [tableset :- Tableset]
   (into {} (for [{{domain-entity-name :name dimensions :dimensions} :domain_entity :as table} tableset]
              [domain-entity-name
-              {:dimensions (m/map-vals de/mbql-reference dimensions)
+              {:dimensions (update-vals dimensions de/mbql-reference)
                :entity     table}])))
 
 (mu/defn ^:private apply-transform-to-tableset! :- Bindings
