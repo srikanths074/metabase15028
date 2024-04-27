@@ -108,8 +108,11 @@
   (lib.util.match/match-one filter-clause
     [_tag
      (field :guard optimizable-expr?)
-     (temporal-value :guard optimizable-temporal-value?)]
-    (field-and-temporal-value-have-compatible-units? field temporal-value)))
+     &
+     (temporal-values :guard (partial every? optimizable-temporal-value?))]
+    (every?
+     (partial field-and-temporal-value-have-compatible-units? field)
+     temporal-values)))
 
 (defmethod can-optimize-filter? :between
   [filter-clause]
@@ -197,30 +200,36 @@
        (= (temporal-unit x) :day)))
 
 (defmulti ^:private optimize-filter
-  "Optimize a filter clause against a temporal-bucketed `:field` or `:expression` clause and `:absolute-datetime` or `:relative-datetime`
-  value by converting to an unbucketed range."
+  "Optimize a filter clause against a temporal-bucketed `:field` or `:expression` clause and `:absolute-datetime` or
+  `:relative-datetime` value by converting to an unbucketed range."
   {:arglists '([clause])}
   mbql.u/dispatch-by-clause-name-or-class)
 
 (defmethod optimize-filter :=
-  [[_tag field temporal-value]]
+  [[_tag field & values]]
   (if (date-field-with-day-bucketing? field)
-    [:= (change-temporal-unit-to-default field) (change-temporal-unit-to-default temporal-value)]
+    (into [:= (change-temporal-unit-to-default field)]
+          (map change-temporal-unit-to-default)
+          values)
     (let [temporal-unit (lib.util.match/match-one field
                           [(_ :guard #{:field :expression}) _ (opts :guard :temporal-unit)]
                           (:temporal-unit opts))]
-      (when (field-and-temporal-value-have-compatible-units? field temporal-value)
-        (when-let [lower-bound (temporal-value-lower-bound temporal-value temporal-unit)]
-          (when-let [upper-bound (temporal-value-upper-bound temporal-value temporal-unit)]
-            (let [field' (change-temporal-unit-to-default field)]
-              [:and
-               [:>= field' lower-bound]
-               [:< field' upper-bound]])))))))
+      (when (every? (partial field-and-temporal-value-have-compatible-units? field)
+                    values)
+        (let [field'      (change-temporal-unit-to-default field)
+              new-filters (map (fn [temporal-value]
+                                 (when-let [lower-bound (temporal-value-lower-bound temporal-value temporal-unit)]
+                                   (when-let [upper-bound (temporal-value-upper-bound temporal-value temporal-unit)]
+                                     [[:>= field' lower-bound]
+                                      [:< field'  upper-bound]])))
+                               values)]
+          (when (every? some? new-filters)
+            (into [:and] cat new-filters)))))))
 
 (defmethod optimize-filter :!=
-  [[_tag field temporal-value :as filter-clause]]
+  [[_tag field & values :as filter-clause]]
   (if (date-field-with-day-bucketing? field)
-    [:!= (change-temporal-unit-to-default field) (change-temporal-unit-to-default temporal-value)]
+    (into [:!= (change-temporal-unit-to-default field)] (map change-temporal-unit-to-default) values)
     (when-let [optimized ((get-method optimize-filter :=) filter-clause)]
       (mbql.u/negate-filter-clause optimized))))
 
