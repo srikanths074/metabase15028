@@ -816,13 +816,13 @@
         ;; the rows returned should be the ones with a nil count, in increasing ID order
         (is (= (if (mt/sorts-nil-first? driver/*driver* :type/Integer)
                  ;; if nils come first, we expect the first three rows having a nil count, in id ascending order
-                 [[1 "2018-09-20T00:00:00Z" nil]
-                  [8 "2018-09-27T00:00:00Z" nil]
-                  [15 "2018-10-04T00:00:00Z" nil]]
+                 [[1 "2018-09-20" nil]
+                  [8 "2018-09-27" nil]
+                  [15 "2018-10-04" nil]]
                  ;; if nils come last, we expect the first three rows having a count of 0, in id ascending order
-                 [[2 "2018-09-21T00:00:00Z" 0]
-                  [3 "2018-09-22T00:00:00Z" 0]
-                  [9 "2018-09-28T00:00:00Z" 0]])
+                 [[2 "2018-09-21" 0]
+                  [3 "2018-09-22" 0]
+                  [9 "2018-09-28" 0]])
               (mt/formatted-rows [int identity int]
                 (mt/run-mbql-query bird-count
                   {:order-by [[:asc $count] [:asc $id]]
@@ -859,9 +859,9 @@
                 (mt/with-native-query-testing-context query
                   (testing "Results: should return correct rows"
                     (let [results (qp/process-query query)]
-                      (is (= [[629 "2014-05-08T00:00:00-07:00"]
-                              [733 "2014-05-08T00:00:00-07:00"]
-                              [813 "2014-05-08T00:00:00-07:00"]]
+                      (is (= [[629 "2014-05-08"]
+                              [733 "2014-05-08"]
+                              [813 "2014-05-08"]]
                              ;; WRONG => [[991 "2014-05-09T00:00:00-07:00"]]
                              (mt/formatted-rows [int str]
                                results))))))))))))))

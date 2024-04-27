@@ -322,13 +322,17 @@
   [_driver]
   (h2x/with-database-type-info :%now "timestamptz"))
 
+(defn- to-timestamp [& args]
+  (-> (into [:to_timestamp] args)
+      (h2x/with-database-type-info "timestamptz")))
+
 (defmethod sql.qp/unix-timestamp->honeysql [:postgres :seconds]
-  [_ _ expr]
-  [:to_timestamp expr])
+  [_driver _seconds-or-milliseconds expr]
+  (to-timestamp expr))
 
 (defmethod sql.qp/cast-temporal-string [:postgres :Coercion/YYYYMMDDHHMMSSString->Temporal]
   [_driver _coercion-strategy expr]
-  [:to_timestamp expr (h2x/literal "YYYYMMDDHH24MISS")])
+  (to-timestamp expr (h2x/literal "YYYYMMDDHH24MISS")))
 
 (defmethod sql.qp/cast-temporal-byte [:postgres :Coercion/YYYYMMDDHHMMSSBytes->Temporal]
   [driver _coercion-strategy expr]
@@ -351,6 +355,12 @@
                  [:inline 0.0])]
     (make-time hour minute second)))
 
+(defn- ->date [x]
+  (if (= (h2x/database-type x) "date")
+    x
+    (-> [::pg-conversion x "date"]
+        (h2x/with-database-type-info "date"))))
+
 (mu/defn ^:private date-trunc
   [unit :- ::lib.schema.temporal-bucketing/unit.date-time.truncate
    expr]
@@ -361,12 +371,19 @@
     (time-trunc unit expr)
 
     "timetz"
-    (h2x/cast "timetz" (time-trunc unit expr))
+    (-> [::pg-conversion (time-trunc unit expr) "timetz"]
+        (h2x/with-database-type-info "timetz"))
 
     #_else
-    (let [expr' (->timestamp expr)]
+    ;; date_trunc will return `timestamp`, `timestamptz`, or `interval`; but if `expr` is a `DATE`, it will convert it
+    ;; to `timestamp` automatically and return that.
+    (let [expr'       (->timestamp expr)
+          expr-type   (h2x/database-type expr)
+          result-type (if (= expr-type "date")
+                        "timestamp"
+                        expr-type)]
       (-> [:date_trunc (h2x/literal unit) expr']
-          (h2x/with-database-type-info (h2x/database-type expr'))))))
+          (h2x/with-database-type-info result-type)))))
 
 (defn- extract-from-timestamp [unit expr]
   (extract unit (->timestamp expr)))
@@ -380,14 +397,14 @@
 (defmethod sql.qp/date [:postgres :minute-of-hour]   [_ _ expr] (extract-integer :minute expr))
 (defmethod sql.qp/date [:postgres :hour]             [_ _ expr] (date-trunc :hour expr))
 (defmethod sql.qp/date [:postgres :hour-of-day]      [_ _ expr] (extract-integer :hour expr))
-(defmethod sql.qp/date [:postgres :day]              [_ _ expr] (h2x/->date expr))
+(defmethod sql.qp/date [:postgres :day]              [_ _ expr] (->date expr))
 (defmethod sql.qp/date [:postgres :day-of-month]     [_ _ expr] (extract-integer :day expr))
 (defmethod sql.qp/date [:postgres :day-of-year]      [_ _ expr] (extract-integer :doy expr))
-(defmethod sql.qp/date [:postgres :month]            [_ _ expr] (date-trunc :month expr))
+(defmethod sql.qp/date [:postgres :month]            [_ _ expr] (->date (date-trunc :month expr)))
 (defmethod sql.qp/date [:postgres :month-of-year]    [_ _ expr] (extract-integer :month expr))
-(defmethod sql.qp/date [:postgres :quarter]          [_ _ expr] (date-trunc :quarter expr))
+(defmethod sql.qp/date [:postgres :quarter]          [_ _ expr] (->date (date-trunc :quarter expr)))
 (defmethod sql.qp/date [:postgres :quarter-of-year]  [_ _ expr] (extract-integer :quarter expr))
-(defmethod sql.qp/date [:postgres :year]             [_ _ expr] (date-trunc :year expr))
+(defmethod sql.qp/date [:postgres :year]             [_ _ expr] (->date (date-trunc :year expr)))
 (defmethod sql.qp/date [:postgres :year-of-era]      [_ _ expr] (extract-integer :year expr))
 
 (defmethod sql.qp/date [:postgres :week-of-year-iso] [_driver _ expr] (extract-integer :week expr))
@@ -404,12 +421,15 @@
 
 (defmethod sql.qp/date [:postgres :week]
   [_ _ expr]
-  (sql.qp/adjust-start-of-week :postgres (partial date-trunc :week) expr))
+  (->date (sql.qp/adjust-start-of-week :postgres (partial date-trunc :week) expr)))
 
 (mu/defn ^:private quoted? [database-type :- ::lib.schema.common/non-blank-string]
   (and (str/starts-with? database-type "\"")
        (str/ends-with? database-type "\"")))
 
+;;; yes, this is supposed to return a TIMESTAMP, not a TIMESTAMP WITH TIME ZONE, because changing the time zone of a
+;;; TIMESTAMP WITH TIME ZONE in Postgres is meaningless, since they're all normalized to UTC. But this behavior seems
+;;; wrong and buggy. See https://metaboat.slack.com/archives/C04DN5VRQM6/p1711123111123319
 (defmethod sql.qp/->honeysql [:postgres :convert-timezone]
   [driver [_ arg target-timezone source-timezone]]
   (let [expr         (sql.qp/->honeysql driver (cond-> arg

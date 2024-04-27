@@ -476,7 +476,7 @@
                   "    CAST("
                   "      (\"json_alias_test\".\"bob\" #>> array [ ?, ? ] :: text [ ]) :: VARCHAR AS timestamp"
                   "    )"
-                  "  ) AS \"json_alias_test\","
+                  "  ) :: date AS \"json_alias_test\","
                   "  COUNT(*) AS \"count\""
                   "FROM"
                   "  \"json_alias_test\""
@@ -1067,13 +1067,13 @@
           (is (= [[""]]
                  (mt/rows results))))
         (testing "cols"
-          (is (= [{:display_name "sleep"
-                   :base_type    :type/Text
-                   :effective_type :type/Text
-                   :source       :native
-                   :field_ref    [:field "sleep" {:base-type :type/Text}]
-                   :name         "sleep"}]
-                 (mt/cols results))))))))
+          (is (=? [{:display_name "sleep"
+                    :base_type    :type/Text
+                    :effective_type :type/Text
+                    :source       :native
+                    :field_ref    [:field "sleep" {:base-type :type/Text}]
+                    :name         "sleep"}]
+                  (mt/cols results))))))))
 
 (deftest ^:parallel id-field-parameter-test
   (mt/test-driver :postgres
@@ -1188,9 +1188,9 @@
                                 !month.id]
                        :limit  1})]
           (is (= {:query ["SELECT"
-                          "  DATE_TRUNC('month', \"public\".\"people\".\"birth_date\") AS \"birth_date\","
-                          "  DATE_TRUNC('month', \"public\".\"people\".\"created_at\") AS \"created_at\","
-                          "  DATE_TRUNC('month', CAST(\"public\".\"people\".\"id\" AS timestamp)) AS \"id\""
+                          "  DATE_TRUNC('month', \"public\".\"people\".\"birth_date\") :: date AS \"birth_date\","
+                          "  DATE_TRUNC('month', \"public\".\"people\".\"created_at\") :: date AS \"created_at\","
+                          "  DATE_TRUNC('month', CAST(\"public\".\"people\".\"id\" AS timestamp)) :: date AS \"id\""
                           "FROM"
                           "  \"public\".\"people\""
                           "LIMIT"
@@ -1312,9 +1312,9 @@
         (let [conn-spec      (sql-jdbc.conn/db->pooled-connection-spec (mt/db))
               get-privileges (fn []
                                (sql-jdbc.conn/with-connection-spec-for-testing-connection
-                                 [spec [:postgres (assoc (:details (mt/db)) :user "privilege_rows_test_example_role")]]
-                                 (with-redefs [sql-jdbc.conn/db->pooled-connection-spec (fn [_] spec)]
-                                   (set (sql-jdbc.sync/current-user-table-privileges driver/*driver* spec)))))]
+                                   [spec [:postgres (assoc (:details (mt/db)) :user "privilege_rows_test_example_role")]]
+                                   (with-redefs [sql-jdbc.conn/db->pooled-connection-spec (fn [_] spec)]
+                                     (set (sql-jdbc.sync/current-user-table-privileges driver/*driver* spec)))))]
           (try
            (jdbc/execute! conn-spec (str
                                      "DROP SCHEMA IF EXISTS \"dotted.schema\" CASCADE;"

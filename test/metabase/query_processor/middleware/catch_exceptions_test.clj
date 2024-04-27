@@ -53,7 +53,6 @@
                                   (for [cause causes]
                                     (update cause :stacktrace sequential?)))))))))))
 
-
 (defn catch-exceptions
   ([run]
    (catch-exceptions run {}))
@@ -158,8 +157,9 @@
         (data-perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/view-data :unrestricted)
         (data-perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/create-queries :query-builder-and-native)
         ;; this is not actually a valid query
-        (is (=? {:native       {:query  (str "SELECT DATE_TRUNC('month', \"PUBLIC\".\"VENUES\".\"ID\") AS \"ID\""
-                                             " FROM \"PUBLIC\".\"VENUES\" LIMIT 1048575")
+        (is (=? {:native       {:query  (str "SELECT CAST(DATE_TRUNC('month', \"PUBLIC\".\"VENUES\".\"ID\") AS date) AS \"ID\" "
+                                             "FROM \"PUBLIC\".\"VENUES\" "
+                                             "LIMIT 1048575")
                                 :params nil}
                  :preprocessed map?}
                 (test.users/with-test-user :rasta

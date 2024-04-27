@@ -13,6 +13,15 @@ title: Driver interface changelog
   efficient way possible. This is currently only required for drivers that support the `:uploads` feature, and has
   a default implementation for JDBC-based drivers.
 
+- Temporal bucketing with a `:day`, `:week`, `:month`, `:quarter`, or `:year` unit is now explicitly expected to
+  return the equivalent of a `java.time.LocalDate` (e.g. a SQL `DATE`), rather than a `java.time.LocalDateTime` (e.g.
+  SQL `DATETIME`) or `java.time.OffsetDateTime` (e.g. SQL `TIMESTAMP WITH TIME ZONE`). Previously, this was
+  unspecified, but our driver tests assumed a `TIMESTAMP WITH TIME ZONE`. If you're using our test suite, you may need
+  to update your drivers to get them to pass; SQL drivers will need to update their implementations of
+  `metabase.driver.sql.query-processor/date` for the units mentioned above. If you are not using our test suite, you
+  should not need to make any changes, since our frontend client will display returned values as the correct type
+  either way.
+
 - New feature `:window-functions` has been added. Drivers that implement this method are expected to implement the
   cumulative sum (`:cum-sum`) and cumulative count (`:cum-count`) aggregation clauses in their native query language.
   For non-SQL drivers (drivers not based on our `:sql` or `:sql-jdbc` drivers), this feature flag is set to `false` by
