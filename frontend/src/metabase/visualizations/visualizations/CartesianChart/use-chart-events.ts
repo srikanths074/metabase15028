@@ -1,4 +1,5 @@
 import type { EChartsOption, EChartsType } from "echarts";
+import { assoc } from "icepick";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
@@ -36,6 +37,7 @@ export const useChartEvents = (
   chartModel: BaseCartesianChartModel,
   timelineEventsModel: TimelineEventsModel | null,
   option: EChartsOption,
+  setSeriesVisible: React.Dispatch<React.SetStateAction<boolean[]>>,
   {
     card,
     rawSeries,
@@ -304,6 +306,22 @@ export const useChartEvents = (
         cardId: seriesModel.cardId,
         dimensions,
         settings,
+        extraData: {
+          onLegendClick: () => {
+            setSeriesVisible(seriesVisibility =>
+              assoc(
+                seriesVisibility,
+                seriesIndex,
+                !seriesVisibility[seriesIndex],
+              ),
+            );
+
+            chartRef.current?.dispatchAction({
+              type: "legendToggleSelect",
+              name: seriesModel.dataKey,
+            });
+          },
+        },
       };
 
       if (
@@ -320,12 +338,14 @@ export const useChartEvents = (
       }
     },
     [
+      chartRef,
       chartModel.seriesModels,
       rawSeries,
       settings,
       visualizationIsClickable,
       onVisualizationClick,
       onOpenQuestion,
+      setSeriesVisible,
     ],
   );
 
