@@ -26,6 +26,7 @@ import type {
   TimeSeriesXAxisModel,
   NumericXAxisModel,
   NumericAxisScaleTransforms,
+  OtherSeriesModel,
 } from "metabase/visualizations/echarts/cartesian/model/types";
 import type { EChartsSeriesOption } from "metabase/visualizations/echarts/cartesian/option/types";
 import type {
@@ -81,7 +82,7 @@ export const getBarLabelLayout =
   };
 
 export function getDataLabelFormatter(
-  seriesModel: SeriesModel,
+  seriesModel: SeriesModel | OtherSeriesModel,
   dataset: ChartDataset,
   yAxisScaleTransforms: NumericAxisScaleTransforms,
   settings: ComputedVisualizationSettings,
@@ -99,7 +100,8 @@ export function getDataLabelFormatter(
   });
   const valueFormatter = (value: RowValue) =>
     renderingContext.formatValue(value, {
-      ...(settings.column?.(seriesModel.column) ?? {}),
+      ...(("column" in seriesModel && settings.column?.(seriesModel.column)) ??
+        {}),
       jsx: false,
       compact: isCompact,
       ...formattingOptions,
@@ -127,7 +129,7 @@ function shouldRenderCompact({
   getValue: (datum: Datum) => RowValue;
   formattingOptions?: OptionsType;
   renderingContext: RenderingContext;
-  seriesModel: SeriesModel;
+  seriesModel: SeriesModel | OtherSeriesModel;
   settings: ComputedVisualizationSettings;
 }) {
   if (settings["graph.label_value_formatting"] === "compact") {
@@ -141,7 +143,9 @@ function shouldRenderCompact({
     const lengths = dataset.map(datum => {
       const value = getValue(datum);
       return renderingContext.formatValue(value, {
-        ...(settings.column?.(seriesModel.column) ?? {}),
+        ...(("column" in seriesModel &&
+          settings.column?.(seriesModel.column)) ??
+          {}),
         jsx: false,
         compact: compact,
         ...formattingOptions,
@@ -158,7 +162,7 @@ function shouldRenderCompact({
 }
 
 export const buildEChartsLabelOptions = (
-  seriesModel: SeriesModel,
+  seriesModel: SeriesModel | OtherSeriesModel,
   dataset: ChartDataset,
   yAxisScaleTransforms: NumericAxisScaleTransforms,
   settings: ComputedVisualizationSettings,
@@ -241,12 +245,12 @@ export const computeBarWidth = (
   return barWidth;
 };
 
-const buildEChartsBarSeries = (
+export const buildEChartsBarSeries = (
   dataset: ChartDataset,
   xAxisModel: XAxisModel,
   yAxisScaleTransforms: NumericAxisScaleTransforms,
   chartMeasurements: ChartMeasurements,
-  seriesModel: SeriesModel,
+  seriesModel: SeriesModel | OtherSeriesModel,
   settings: ComputedVisualizationSettings,
   yAxisIndex: number,
   barSeriesCount: number,
@@ -658,9 +662,12 @@ export const buildEChartsSeries = (
     barSeriesCountByYAxisIndex,
   ).length;
 
-  const barSeriesCount = Object.values(seriesSettingsByDataKey).filter(
+  let barSeriesCount = Object.values(seriesSettingsByDataKey).filter(
     seriesSettings => seriesSettings.display === "bar",
   ).length;
+  if (chartModel.otherSeriesModel) {
+    barSeriesCount += 1;
+  }
 
   const hasMultipleSeries = chartModel.seriesModels.length > 1;
 
@@ -723,6 +730,25 @@ export const buildEChartsSeries = (
         // remove this later after refactoring the scatter implementation to a
         // separate codepath.
         series as (LineSeriesOption | BarSeriesOption)[],
+        renderingContext,
+      ),
+    );
+  }
+
+  if (chartModel.otherSeriesModel) {
+    // TODO handle area chart
+    series.push(
+      buildEChartsBarSeries(
+        chartModel.transformedDataset,
+        chartModel.xAxisModel,
+        chartModel.yAxisScaleTransforms,
+        chartMeasurements,
+        chartModel.otherSeriesModel,
+        settings,
+        0, // TODO fix after updating y-axis split
+        barSeriesCount,
+        yAxisWithBarSeriesCount,
+        true,
         renderingContext,
       ),
     );

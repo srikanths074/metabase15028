@@ -27,6 +27,7 @@ import type {
 } from "metabase/visualizations/types";
 import type { RawSeries, SingleSeries } from "metabase-types/api";
 
+import { groupSeriesIntoOther } from "./other-series";
 import { getAxisTransforms } from "./transforms";
 import { getTrendLines } from "./trend-line";
 
@@ -110,6 +111,9 @@ export const getCartesianChartModel = (
   }
   dataset = sortDataset(dataset, settings["graph.x_axis.scale"], showWarning);
 
+  const { ungroupedSeriesModels, groupedSeriesKeys, otherSeriesModel } =
+    groupSeriesIntoOther(dataset, seriesModels, settings);
+
   const xAxisModel = getXAxisModel(
     dimensionModel,
     rawSeries,
@@ -126,7 +130,8 @@ export const getCartesianChartModel = (
   const transformedDataset = applyVisualizationSettingsDataTransformations(
     dataset,
     xAxisModel,
-    seriesModels,
+    ungroupedSeriesModels,
+    groupedSeriesKeys,
     yAxisScaleTransforms,
     settings,
     showWarning,
@@ -137,7 +142,7 @@ export const getCartesianChartModel = (
   );
 
   const { leftAxisModel, rightAxisModel } = getYAxesModels(
-    seriesModels,
+    ungroupedSeriesModels,
     transformedDataset,
     settings,
     columnByDataKey,
@@ -149,7 +154,7 @@ export const getCartesianChartModel = (
     rawSeries,
     [leftAxisModel, rightAxisModel],
     yAxisScaleTransforms,
-    seriesModels,
+    ungroupedSeriesModels,
     transformedDataset,
     settings,
     renderingContext,
@@ -158,7 +163,7 @@ export const getCartesianChartModel = (
   return {
     dataset,
     transformedDataset,
-    seriesModels,
+    seriesModels: ungroupedSeriesModels,
     yAxisScaleTransforms,
     columnByDataKey,
     dimensionModel,
@@ -166,6 +171,10 @@ export const getCartesianChartModel = (
     leftAxisModel,
     rightAxisModel,
     trendLinesModel,
-    bubbleSizeDomain: getBubbleSizeDomain(seriesModels, transformedDataset),
+    otherSeriesModel,
+    bubbleSizeDomain: getBubbleSizeDomain(
+      ungroupedSeriesModels,
+      transformedDataset,
+    ),
   };
 };

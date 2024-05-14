@@ -72,6 +72,8 @@ export type TrendLineSeriesModel = BaseSeriesModel & {
   sourceDataKey: DataKey;
 };
 
+export type OtherSeriesModel = BaseSeriesModel;
+
 export type SeriesModel =
   | RegularSeriesModel
   | BreakoutSeriesModel
@@ -198,6 +200,9 @@ export type BaseCartesianChartModel = {
   seriesIdToDataKey?: Record<string, DataKey>;
 
   trendLinesModel?: TrendLinesModel;
+
+  // For `max_categories` setting
+  otherSeriesModel?: OtherSeriesModel;
 };
 
 export type CartesianChartModel = BaseCartesianChartModel & {

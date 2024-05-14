@@ -320,6 +320,7 @@ describe("dataset transform functions", () => {
         originalDataset,
         xAxisModel,
         seriesModels,
+        [],
         yAxisScaleTransforms,
         createMockComputedVisualizationSettings({
           "stackable.stack_type": "stacked",
@@ -351,6 +352,7 @@ describe("dataset transform functions", () => {
         originalDataset,
         xAxisModel,
         seriesModels,
+        [],
         yAxisScaleTransforms,
         createMockComputedVisualizationSettings({
           "stackable.stack_type": "normalized",
@@ -389,6 +391,7 @@ describe("dataset transform functions", () => {
         dataset,
         xAxisModel,
         seriesModels,
+        [],
         yAxisScaleTransforms,
         createMockComputedVisualizationSettings({
           series: (key: LegacySeriesSettingsObjectKey) => ({
@@ -442,6 +445,7 @@ describe("dataset transform functions", () => {
           dataset,
           xAxisModel,
           [createMockSeriesModel({ dataKey: "series1" })],
+          [],
           yAxisScaleTransforms,
           createMockComputedVisualizationSettings({
             series: () => ({
@@ -472,6 +476,7 @@ describe("dataset transform functions", () => {
           dataset,
           { ...xAxisModel, intervalsCount: 10001 },
           [createMockSeriesModel({ dataKey: "series1" })],
+          [],
           yAxisScaleTransforms,
           createMockComputedVisualizationSettings({
             series: () => ({
@@ -489,6 +494,7 @@ describe("dataset transform functions", () => {
         [],
         xAxisModel,
         seriesModels,
+        [],
         yAxisScaleTransforms,
         createMockVisualizationSettings({
           series: (key: LegacySeriesSettingsObjectKey) => ({
@@ -578,6 +584,7 @@ describe("dataset transform functions", () => {
           [],
           xAxisModel,
           seriesModels,
+          [],
           yAxisScaleTransforms,
           createMockComputedVisualizationSettings(),
         ),

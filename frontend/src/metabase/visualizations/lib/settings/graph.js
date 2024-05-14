@@ -40,6 +40,7 @@ import {
   getDefaultIsAutoSplitEnabled,
   getDefaultColumns,
   STACKABLE_DISPLAY_TYPES,
+  getDefaultMaxCategories,
 } from "metabase/visualizations/shared/settings/cartesian-chart";
 import {
   isDate,
@@ -390,6 +391,13 @@ export const GRAPH_DISPLAY_VALUES_SETTINGS = {
     },
     default: "auto",
     readDependencies: ["graph.show_values"],
+  },
+  "graph.max_categories": {
+    section: t`Display`,
+    title: t`Maximum number of categories`,
+    widget: "number",
+    getDefault: getDefaultMaxCategories,
+    getHidden: series => series.length < 2,
   },
 };
 

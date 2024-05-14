@@ -8,6 +8,7 @@ import {
   ECHARTS_CATEGORY_AXIS_NULL_VALUE,
   NEGATIVE_STACK_TOTAL_DATA_KEY,
   ORIGINAL_INDEX_DATA_KEY,
+  OTHER_DATA_KEY,
   POSITIVE_STACK_TOTAL_DATA_KEY,
   X_AXIS_DATA_KEY,
 } from "metabase/visualizations/echarts/cartesian/constants/dataset";
@@ -330,6 +331,24 @@ const getStackedAreasInterpolateTransform = (
   };
 };
 
+function getOtherSeriesTransform(
+  groupedSeriesKeys: DataKey[],
+): ConditionalTransform {
+  return {
+    condition: groupedSeriesKeys.length > 0,
+    fn: datum => {
+      const transformedDatum = { ...datum };
+
+      transformedDatum[OTHER_DATA_KEY] = groupedSeriesKeys.reduce(
+        (sum, key) => sum + checkNumber(datum[key] ?? 0),
+        0,
+      );
+
+      return transformedDatum;
+    },
+  };
+}
+
 function getStackedValueTransformFunction(
   seriesDataKeys: DataKey[],
   valueTransform: (value: number) => number,
@@ -575,6 +594,7 @@ export const applyVisualizationSettingsDataTransformations = (
   dataset: ChartDataset,
   xAxisModel: XAxisModel,
   seriesModels: SeriesModel[],
+  groupedSeriesKeys: DataKey[],
   yAxisScaleTransforms: NumericAxisScaleTransforms,
   settings: ComputedVisualizationSettings,
   showWarning?: ShowWarning,
@@ -607,6 +627,7 @@ export const applyVisualizationSettingsDataTransformations = (
       condition: settings["stackable.stack_type"] === "normalized",
       fn: getNormalizedDatasetTransform(seriesDataKeys),
     },
+    getOtherSeriesTransform(groupedSeriesKeys),
     getKeyBasedDatasetTransform(seriesDataKeys, value =>
       yAxisScaleTransforms.toEChartsAxisValue(value),
     ),
