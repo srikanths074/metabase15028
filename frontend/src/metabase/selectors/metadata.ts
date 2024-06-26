@@ -1,5 +1,7 @@
 import { createSelector } from "@reduxjs/toolkit";
+import { normalize } from "normalizr";
 
+import { DatabaseSchema, TableSchema } from "metabase/schema";
 import Question from "metabase-lib/v1/Question";
 import Database from "metabase-lib/v1/metadata/Database";
 import Field from "metabase-lib/v1/metadata/Field";
@@ -14,6 +16,7 @@ import {
   getRemappings,
 } from "metabase-lib/v1/queries/utils/field";
 import type {
+  Table as ApiTable,
   Card,
   NormalizedDatabase,
   NormalizedField,
@@ -24,7 +27,17 @@ import type {
 } from "metabase-types/api";
 import type { State } from "metabase-types/store";
 
+import { getApiEntities } from "./api";
 import { getSettings } from "./settings";
+
+const getNormalizedApiEntities = createSelector([getApiEntities], data => {
+  const schema = {
+    databases: [DatabaseSchema],
+    tables: [TableSchema],
+  };
+  const { entities } = normalize(data, schema);
+  return entities;
+});
 
 type TableSelectorOpts = {
   includeHiddenTables?: boolean;
@@ -36,10 +49,17 @@ type FieldSelectorOpts = {
 
 export type MetadataSelectorOpts = TableSelectorOpts & FieldSelectorOpts;
 
-const getNormalizedDatabases = (state: State) => state.entities.databases;
+const getNormalizedDatabases = createSelector(
+  [getNormalizedApiEntities],
+  entities => entities.databases ?? {},
+);
+
 const getNormalizedSchemas = (state: State) => state.entities.schemas;
 
-const getNormalizedTablesUnfiltered = (state: State) => state.entities.tables;
+const getNormalizedTablesUnfiltered = createSelector(
+  getNormalizedApiEntities,
+  entities => entities.tables ?? {},
+);
 
 const getIncludeHiddenTables = (_state: State, props?: TableSelectorOpts) =>
   !!props?.includeHiddenTables;
@@ -96,6 +116,7 @@ export const getMetadata: (
   props?: MetadataSelectorOpts,
 ) => Metadata = createSelector(
   [
+    getApiEntities,
     getNormalizedDatabases,
     getNormalizedSchemas,
     getNormalizedTables,
@@ -104,7 +125,16 @@ export const getMetadata: (
     getNormalizedQuestions,
     getSettings,
   ],
-  (databases, schemas, tables, fields, segments, questions, settings) => {
+  (
+    apiEntities,
+    databases,
+    schemas,
+    tables,
+    fields,
+    segments,
+    questions,
+    settings,
+  ) => {
     const metadata = new Metadata({ settings });
 
     metadata.databases = Object.fromEntries(
@@ -135,9 +165,11 @@ export const getMetadata: (
       schema.database = hydrateSchemaDatabase(schema, metadata);
     });
     Object.values(metadata.tables).forEach(table => {
+      const rawTable = apiEntities.tables[table.id];
+
       table.db = hydrateTableDatabase(table, metadata);
       table.schema = hydrateTableSchema(table, metadata);
-      table.fields = hydrateTableFields(table, metadata);
+      table.fields = rawTable ? hydrateTableFields(rawTable, metadata) : [];
       table.fks = hydrateTableForeignKeys(table, metadata);
       table.segments = hydrateTableSegments(table, metadata);
       table.metrics = hydrateTableMetrics(table, metadata);
@@ -305,9 +337,13 @@ function hydrateTableSchema(
   return metadata.schema(schemaId) ?? undefined;
 }
 
-function hydrateTableFields(table: Table, metadata: Metadata): Field[] {
-  const fieldIds = table.getPlainObject().fields ?? [];
-  return fieldIds.map(id => metadata.field(id)).filter(isNotNull);
+function hydrateTableFields(table: ApiTable, metadata: Metadata): Field[] {
+  const fields = table.fields ?? [];
+  return fields.map(rawField => {
+    const field = new Field(rawField);
+    field.metadata = metadata;
+    return field;
+  });
 }
 
 function hydrateTableForeignKeys(
