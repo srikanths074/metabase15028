@@ -360,6 +360,7 @@
           res-fut (future (.query client (.build request) (u/varargs BigQuery$JobOption)))]
       (when cancel-chan
         (future                       ; this needs to run in a separate thread, because the <!! operation blocks forever
+          (.setName (Thread/currentThread) (name (gensym "bigquery-cancel-watcher")))
           (when (a/<!! cancel-chan)
             (log/debug "Received a message on the cancel channel; attempting to stop the BigQuery query execution")
             (reset! cancel-requested? true) ; signal the page iteration fn to stop
@@ -371,10 +372,16 @@
               (future-cancel res-fut)
               (when (future-done? res-fut) ; canceled received after it was finished; may as well return it
                 @res-fut)))))
-      @res-fut)
+      (u/prog1 @res-fut
+        (when cancel-chan
+          (a/close! cancel-chan))))
     (catch java.util.concurrent.CancellationException _e
+      (when cancel-chan
+        (a/close! cancel-chan))
       (throw (ex-info (tru "Query cancelled") {:sql sql :parameters parameters ::cancelled? true})))
     (catch BigQueryException e
+      (when cancel-chan
+        (a/close! cancel-chan))
       (if (.isRetryable e)
         (throw (ex-info (tru "BigQueryException executing query")
                         {:retryable? (.isRetryable e), :sql sql, :parameters parameters}
