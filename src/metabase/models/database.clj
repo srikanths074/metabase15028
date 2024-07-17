@@ -213,7 +213,7 @@
   (when-some [table-ids (not-empty (t2/select-pks-vec :model/Table :db_id id))]
     (t2/delete! :model/Field :table_id [:in table-ids]))
   (try
-    (driver/notify-database-updated driver database)
+    (driver/notify-database-will-be-deleted! driver database)
     (catch Throwable e
       (log/error e "Error sending database deletion notification"))))
 

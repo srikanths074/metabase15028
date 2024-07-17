@@ -1,6 +1,7 @@
 (ns metabase.test.data.h2
   "Code for creating / destroying an H2 database from a `DatabaseDefinition`."
   (:require
+   [clojure.java.jdbc :as jdbc]
    [metabase.db :as mdb]
    [metabase.driver.ddl.interface :as ddl.i]
    [metabase.driver.h2]
@@ -10,12 +11,13 @@
    [metabase.test.data.interface :as tx]
    [metabase.test.data.sql :as sql.tx]
    [metabase.test.data.sql-jdbc :as sql-jdbc.tx]
-   [metabase.test.data.sql-jdbc.execute :as execute]
    [metabase.test.data.sql-jdbc.load-data :as load-data]
    [metabase.test.data.sql-jdbc.spec :as spec]
    [metabase.test.data.sql.ddl :as ddl]
    [metabase.util :as u]
    [toucan2.core :as t2]))
+
+(set! *warn-on-reflection* true)
 
 (comment metabase.driver.h2/keep-me)
 
@@ -60,6 +62,32 @@
                                                       ;; allowed.
                                                       ";USER=GUEST;PASSWORD=guest"))})
 
+(defn- already-loaded? [driver dbdef]
+  (with-open [^java.sql.Connection conn #_{:clj-kondo/ignore [:discouraged-var]} (jdbc/get-connection (spec/dbdef->spec driver :server dbdef))]
+    (let [metadata (.getMetaData conn)]
+      (with-open [rset (.getSchemas metadata)]
+        (boolean
+         (loop []
+           (when (.next rset)
+             (or (= (.getString rset "table_schem") "__loaded")
+                 (recur)))))))))
+
+(defmethod tx/create-db! :h2
+  [driver dbdef & options]
+  (when-not (already-loaded? driver dbdef)
+    (u/prog1 (apply (get-method tx/create-db! :sql-jdbc/test-extensions) driver dbdef options)
+      (with-open [^java.sql.Connection conn #_{:clj-kondo/ignore [:discouraged-var]} (jdbc/get-connection (spec/dbdef->spec driver :server dbdef))
+                  stmt (.createStatement conn)]
+        (.execute stmt "CREATE SCHEMA \"__loaded\";")
+        (assert (already-loaded? driver dbdef))))))
+
+(defmethod tx/destroy-db! :h2
+  [driver dbdef]
+  (when (= (:database-name dbdef) "test-data")
+    (assert (= driver :h2)
+            (format "non-H2 driver %s attempting to stomp on H2 test data!" driver)))
+  ((get-method tx/destroy-db! :sql-jdbc/test-extensions) driver dbdef))
+
 (defmethod sql.tx/pk-sql-type :h2 [_] "BIGINT AUTO_INCREMENT")
 
 (defmethod sql.tx/pk-field-name :h2 [_] "ID")
@@ -91,7 +119,9 @@
 
 (defmethod ddl/drop-db-ddl-statements :h2
   [_driver _dbdef & _options]
-  ["SHUTDOWN;"])
+  ;; set the DB close delay to 0 which means it can get closed out and purged from memory when the last open connection
+  ;; is closed.
+  ["SET DB_CLOSE_DELAY 0;"])
 
 (defmethod tx/id-field-type :h2 [_] :type/BigInteger)
 
@@ -114,12 +144,11 @@
     (when (= ag-type :cum-count)
       {:base_type :type/Decimal}))))
 
-(defmethod execute/execute-sql! :h2
-  [driver _ dbdef sql]
-  ;; we always want to use 'server' context when execute-sql! is called (never
-  ;; try connect as GUEST, since we're not giving them priviledges to create
-  ;; tables / etc)
-  ((get-method execute/execute-sql! :sql-jdbc/test-extensions) driver :server dbdef sql))
+(defmethod spec/dbdef->spec :h2
+  [driver _context dbdef]
+  ;; we always want to use 'server' context to get a connection spec for executing SQL is called (never try connect as
+  ;; GUEST, since we're not giving them priviledges to create tables / etc)
+  ((get-method spec/dbdef->spec :sql-jdbc/test-extensions) driver :server dbdef))
 
 ;; Don't use the h2 driver implementation, which makes the connection string read-only & if-exists only
 (defmethod spec/dbdef->spec :h2
