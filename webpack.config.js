@@ -136,7 +136,7 @@ const config = {
   module: {
     rules: [
       {
-        // swc breaks styles for the whole app if we proceed this file
+        // swc breaks styles for the whole app if we process this file
         test: /css\/core\/fonts\.styled\.ts$/,
         exclude: /node_modules|cljs/,
         use: [BABEL_LOADER],
