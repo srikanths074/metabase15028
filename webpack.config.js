@@ -1,18 +1,16 @@
+// @ts-check
 /* eslint-env node */
 /* eslint-disable import/no-commonjs */
-/* eslint-disable import/order */
-const NodePolyfillPlugin = require("node-polyfill-webpack-plugin");
-
-const webpack = require("webpack");
-
-const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const HtmlWebpackPlugin = require("html-webpack-plugin");
-const TerserPlugin = require("terser-webpack-plugin");
-const WebpackNotifierPlugin = require("webpack-notifier");
-const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
-
 const fs = require("fs");
+
+const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const NodePolyfillPlugin = require("node-polyfill-webpack-plugin");
 const path = require("path");
+const TerserPlugin = require("terser-webpack-plugin");
+const webpack = require("webpack");
+const WebpackNotifierPlugin = require("webpack-notifier");
 
 const ASSETS_PATH = __dirname + "/resources/frontend_client/app/assets";
 const FONTS_PATH = __dirname + "/resources/frontend_client/app/fonts";
@@ -102,6 +100,7 @@ class OnScriptError {
   }
 }
 
+/** @type {import('webpack').Configuration} */
 const config = {
   mode: devMode ? "development" : "production",
   context: SRC_PATH,
@@ -341,6 +340,11 @@ const config = {
 
 if (WEBPACK_BUNDLE === "hot") {
   config.target = "web";
+
+  if (!config.output || !config.plugins) {
+    throw new Error("webpack config is missing configuration");
+  }
+
   // suffixing with ".hot" allows us to run both `yarn run build-hot` and `yarn run test` or `yarn run test-watch` simultaneously
   config.output.filename = "[name].hot.bundle.js";
 
@@ -383,6 +387,10 @@ if (WEBPACK_BUNDLE === "hot") {
 }
 
 if (WEBPACK_BUNDLE !== "production") {
+  if (!config.output || !config.resolve || !config.plugins) {
+    throw new Error("webpack config is missing configuration");
+  }
+
   // replace minified files with un-minified versions
   for (const name in config.resolve.alias) {
     const minified = config.resolve.alias[name];
