@@ -10,6 +10,7 @@
    [clojure.set :as set]
    [clojure.string :as str]
    [java-time.api :as t]
+   [metabase.async.util :as async.u]
    [metabase.driver.impl :as driver.impl]
    [metabase.models.setting :as setting :refer [defsetting]]
    [metabase.plugins.classloader :as classloader]
@@ -18,6 +19,7 @@
    [metabase.util.i18n :refer [deferred-tru tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
+   [metabase.util.malli.registry :as mr]
    [potemkin :as p]
    [toucan2.core :as t2]))
 
@@ -443,12 +445,24 @@
   dispatch-on-uninitialized-driver
   :hierarchy #'hierarchy)
 
+(mr/def ::execute-query.context
+  [:map
+   [:canceled-chan {:optional true} [:maybe async.u/PromiseChan]]])
+
 (defmulti execute-reducible-query
-  "Execute a native query against that database and return rows that can be reduced using `transduce`/`reduce`.
+  "Execute a native query against that database and return rows that can be reduced using `transduce`/`reduce`. This
+  query is guaranteed to be compiled, i.e. it will have a top-level `:native` key with `:query` and possibly
+  `:params`.
+
+  `context` is a map that mostly exists for historic reasons, and has just one key, `:canceled-chan`, containing a
+  `core.async` promise channel that will get a message if the query should be canceled because the upstream HTTP
+  connection has been closed early. It matches the schema [[::execute-query.context]].
 
   Pass metadata about the columns and the reducible object to `respond`, which has the signature
 
     (respond results-metadata rows)
+
+  See the schema [[:metabase.query-processor.schema/respond]] for more details.
 
   You can use [[metabase.query-processor.reducible/reducible-rows]] to create reducible, streaming results.
 
@@ -463,6 +477,27 @@
          {:cols [{:name \"my_col\"}]}
          (qp.reducible/reducible-rows (get-row results) (context/canceled-chan context)))))"
   {:added "0.35.0", :arglists '([driver query context respond])}
+  dispatch-on-initialized-driver
+  :hierarchy #'hierarchy)
+
+(defmulti EXPERIMENTAL-execute-multiple-queries
+  "EXPERIMENTAL INTERNAL USE ONLY! DO NOT IMPLEMENT IN THIRD-PARTY DRIVERS! MAY BE REMOVED WITHOUT NOTICE!
+
+  (Mostly) like [[execute-reducible-query]], but execute several queries at once with `UNION ALL` or similar. All
+  queries are guaranteed to have the same set of returned columns and be against the same Database. `queries` will be
+  pMBQL-style queries with a single native stage rather than legacy MBQL queries.
+
+  Query should be executed sequentially and return a response matching the `::execute-multiple-queries-response`
+  schema.
+
+  Used internally for fast pivot query implementations... this is probably not a good long-term solution to the
+  problem however. `UNION ALL` should really be a part of MBQL itself instead of a different way of running queries.
+  So don't run around implementing this method in third-party drivers just yet.
+
+  Note that this does not have a separate `context` parameter with a `:canceled-chan`; look
+  at [[metabase.query-processor.pipeline/*canceled-chan*]] instead if you want to implement behavior if the query is
+  canceled upstream."
+  {:added "0.51.0", :changelog-test/ignore true, :arglists '([driver queries respond])}
   dispatch-on-initialized-driver
   :hierarchy #'hierarchy)
 

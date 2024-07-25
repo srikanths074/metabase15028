@@ -9,20 +9,26 @@
    [clojure.java.jdbc :as jdbc]
    [clojure.string :as str]
    [java-time.api :as t]
+   [metabase.async.util :as async.u]
    [metabase.driver :as driver]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql-jdbc.execute.diagnostic :as sql-jdbc.execute.diagnostic]
    [metabase.driver.sql-jdbc.execute.old-impl :as sql-jdbc.execute.old]
    [metabase.driver.sql-jdbc.sync.interface :as sql-jdbc.sync.interface]
+   [metabase.lib.convert :as lib.convert]
    [metabase.lib.metadata :as lib.metadata]
+   [metabase.lib.schema :as lib.schema]
    [metabase.lib.schema.common :as lib.schema.common]
    [metabase.lib.schema.expression.temporal :as lib.schema.expression.temporal]
+   [metabase.lib.schema.id :as lib.schema.id]
    [metabase.models.setting :refer [defsetting]]
    [metabase.public-settings.premium-features :refer [defenterprise]]
+   [metabase.query-processor.compile :as qp.compile]
    [metabase.query-processor.error-type :as qp.error-type]
    [metabase.query-processor.middleware.limit :as limit]
    [metabase.query-processor.pipeline :as qp.pipeline]
    [metabase.query-processor.reducible :as qp.reducible]
+   [metabase.query-processor.schema :as qp.schema]
    [metabase.query-processor.store :as qp.store]
    [metabase.query-processor.timezone :as qp.timezone]
    [metabase.query-processor.util :as qp.util]
@@ -30,6 +36,7 @@
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
+   [metabase.util.malli.registry :as mr]
    [potemkin :as p])
   (:import
    (java.sql Connection JDBCType PreparedStatement ResultSet ResultSetMetaData SQLFeatureNotSupportedException
@@ -42,6 +49,12 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                        SQL JDBC Reducible QP Interface                                         |
 ;;; +----------------------------------------------------------------------------------------------------------------+
+
+(mr/def ::sql
+  ::lib.schema.common/non-blank-string)
+
+(mr/def ::params
+  [:maybe [:sequential :any]])
 
 (def ConnectionOptions
   "Malli schema for the options passed to [[do-with-connection-with-options]]."
@@ -532,8 +545,12 @@
         (u/ignore-exceptions
           (.cancel stmt))))))
 
-(defn- prepared-statement*
-  ^PreparedStatement [driver conn sql params canceled-chan]
+(mu/defn ^:private prepared-statement* :- (lib.schema.common/instance-of-class PreparedStatement)
+  ^PreparedStatement [driver        :- :keyword
+                      conn          :- (lib.schema.common/instance-of-class Connection)
+                      sql           :- ::sql
+                      params        :- ::params
+                      canceled-chan :- [:maybe async.u/PromiseChan]]
   ;; sometimes preparing the statement fails, usually if the SQL syntax is invalid.
   (doto (try
           (prepared-statement driver conn sql params)
@@ -571,7 +588,12 @@
     (throw (ex-info (str (tru "Select statement did not produce a ResultSet for native query"))
                     {:sql sql :driver driver}))))
 
-(defn- execute-statement-or-prepared-statement! ^ResultSet [driver ^Statement stmt max-rows params sql]
+(mu/defn ^:private execute-statement-or-prepared-statement! :- (lib.schema.common/instance-of-class ResultSet)
+  ^ResultSet [driver          :- :keyword
+              ^Statement stmt :- (lib.schema.common/instance-of-class Statement)
+              max-rows        :- :int
+              params          :- ::params
+              sql             :- ::sql]
   (let [st (doto stmt (.setMaxRows max-rows))]
     (if (use-statement? driver params)
       (execute-statement! driver st sql)
@@ -585,7 +607,7 @@
       ^{:name (format "(.getObject rs %d)" i)} (fn []
                                                  (.getObject rs i)))))
 
-(defn- get-object-of-class-thunk [^ResultSet rs, ^long i, ^Class klass]
+(defn- get-object-of-class-thunk [^ResultSet rs ^long i ^Class klass]
   ^{:name (format "(.getObject rs %d %s)" i (.getCanonicalName klass))}
   (fn []
     (.getObject rs i klass)))
@@ -690,60 +712,138 @@
   [_ sql remark]
   (str "-- " remark "\n" sql))
 
-(defn execute-reducible-query
+(mu/defn ^:private execute-reducible-query* :- :some
+  [driver   :- :keyword
+   sql      :- ::sql
+   params   :- ::params
+   max-rows :- :int
+   respond  :- ::qp.schema/respond]
+  (do-with-connection-with-options
+   driver
+   (lib.metadata/database (qp.store/metadata-provider))
+   {:session-timezone (qp.timezone/report-timezone-id-if-supported driver (lib.metadata/database (qp.store/metadata-provider)))}
+   (fn [^Connection conn]
+     (with-open [stmt          (statement-or-prepared-statement driver conn sql params qp.pipeline/*canceled-chan*)
+                 ^ResultSet rs (try
+                                 (execute-statement-or-prepared-statement! driver stmt max-rows params sql)
+                                 (catch Throwable e
+                                   (throw (ex-info (tru "Error executing query: {0}" (ex-message e))
+                                                   {:driver driver
+                                                    :sql    (str/split-lines (driver/prettify-native-form driver sql))
+                                                    :params params
+                                                    :type   qp.error-type/invalid-query}
+                                                   e))))]
+       (let [rsmeta           (.getMetaData rs)
+             results-metadata {:cols (column-metadata driver rsmeta)}]
+         (try (respond results-metadata (reducible-rows driver rs rsmeta qp.pipeline/*canceled-chan*))
+              ;; Following cancels the statment on the dbms side.
+              ;; It avoids blocking `.close` call, in case we reduced the results subset eg. by means of
+              ;; [[metabase.query-processor.middleware.limit/limit-xform]] middleware, while statment is still
+              ;; in progress. This problem was encountered on Redshift. For details see the issue #39018.
+              ;; It also handles situation where query is canceled through [[qp.pipeline/*canceled-chan*]] (#41448).
+              (finally
+                ;; TODO: Following `when` is in place just to find out if vertica is flaking because of cancelations.
+                ;;       It should be removed afterwards!
+                (when-not (= :vertica driver)
+                  (try (.cancel stmt)
+                       (catch SQLFeatureNotSupportedException _
+                         (log/warnf "Statemet's `.cancel` method is not supported by the `%s` driver."
+                                    (name driver)))
+                       (catch Throwable _
+                         (log/warn "Statement cancelation failed.")))))))))))
+
+(mu/defn execute-reducible-query :- :some
   "Default impl of [[metabase.driver/execute-reducible-query]] for sql-jdbc drivers."
   {:added "0.35.0", :arglists '([driver query context respond] [driver sql params max-rows context respond])}
-  ([driver {{sql :query, params :params} :native, :as outer-query} context respond]
-   {:pre [(string? sql) (seq sql)]}
-   (let [database (lib.metadata/database (qp.store/metadata-provider))
-         sql      (if (get-in database [:details :include-user-id-and-hash] true)
-                    (->> (qp.util/query->remark driver outer-query)
-                         (inject-remark driver sql))
-                    sql)
-         max-rows (limit/determine-query-max-rows outer-query)]
-     (execute-reducible-query driver sql params max-rows context respond)))
+  [driver                                                  :- :keyword
+   {{sql :query, params :params} :native, :as outer-query} :- [:map
+                                                               [:native [:map
+                                                                         [:query ::sql]
+                                                                         [:params {:optional true} ::params]]]]
+   _context                                                :- ::driver/execute-query.context
+   respond                                                 :- ::qp.schema/respond]
+  {:pre [(string? sql) (seq sql)]}
+  (let [database (lib.metadata/database (qp.store/metadata-provider))
+        sql      (if (get-in database [:details :include-user-id-and-hash] true)
+                   (->> (qp.util/query->remark driver outer-query)
+                        (inject-remark driver sql))
+                   sql)
+        max-rows (limit/determine-query-max-rows outer-query)]
+    (execute-reducible-query* driver sql params max-rows respond)))
 
-  ([driver sql params max-rows _context respond]
-   (do-with-connection-with-options
-    driver
-    (lib.metadata/database (qp.store/metadata-provider))
-    {:session-timezone (qp.timezone/report-timezone-id-if-supported driver (lib.metadata/database (qp.store/metadata-provider)))}
-    (fn [^Connection conn]
-      (with-open [stmt          (statement-or-prepared-statement driver conn sql params qp.pipeline/*canceled-chan*)
-                  ^ResultSet rs (try
-                                  (execute-statement-or-prepared-statement! driver stmt max-rows params sql)
-                                  (catch Throwable e
-                                    (throw (ex-info (tru "Error executing query: {0}" (ex-message e))
-                                                    {:driver driver
-                                                     :sql    (str/split-lines (driver/prettify-native-form driver sql))
-                                                     :params params
-                                                     :type   qp.error-type/invalid-query}
-                                                    e))))]
-        (let [rsmeta           (.getMetaData rs)
-              results-metadata {:cols (column-metadata driver rsmeta)}]
-          (try (respond results-metadata (reducible-rows driver rs rsmeta qp.pipeline/*canceled-chan*))
-               ;; Following cancels the statment on the dbms side.
-               ;; It avoids blocking `.close` call, in case we reduced the results subset eg. by means of
-               ;; [[metabase.query-processor.middleware.limit/limit-xform]] middleware, while statment is still
-               ;; in progress. This problem was encountered on Redshift. For details see the issue #39018.
-               ;; It also handles situation where query is canceled through [[qp.pipeline/*canceled-chan*]] (#41448).
-               (finally
-                 ;; TODO: Following `when` is in place just to find out if vertica is flaking because of cancelations.
-                 ;;       It should be removed afterwards!
-                 (when-not (= :vertica driver)
-                   (try (.cancel stmt)
-                        (catch SQLFeatureNotSupportedException _
-                          (log/warnf "Statemet's `.cancel` method is not supported by the `%s` driver."
-                                     (name driver)))
-                        (catch Throwable _
-                          (log/warn "Statement cancelation failed."))))))))))))
+(mr/def ::compiled-legacy-query
+  [:map
+   [:database ::lib.schema.id/database]
+   [:native   ::qp.compile/compiled]])
 
-(defn reducible-query
-  "Returns a reducible collection of rows as maps from `db` and a given SQL query. This is similar to [[jdbc/reducible-query]] but reuses the
-  driver-specific configuration for the Connection and Statement/PreparedStatement. This is slightly different from [[execute-reducible-query]]
-  in that it is not intended to be used as part of middleware. Keywordizes column names. "
+(mr/def ::compiled-pmbql-query
+  [:map
+   [:lib/type [:= :mbql/query]]
+   [:database ::lib.schema.id/database]
+   [:stages   [:sequential {:min 1, :max 1} ::lib.schema/stage.native]]])
+
+;;; if we do end needing to add a top-level ORDER BY to the UNION ALL this is a hacky but working PoC for doing so. See
+;;; https://metaboat.slack.com/archives/C04DN5VRQM6/p1721798965664409 for more on this
+
+#_(mu/defn ^:private MEGA-HACK-combine-native-queries-order-by :- [:maybe :string]
+  [driver  :- :keyword
+   queries :- [:sequential {:min 1} ::compiled-pmbql-query]]
+  (when-let [first-query (get-in queries [0 :info :pivot/compiled-from])]
+    (let [cols               (lib/returned-columns first-query)
+          order-by-col-names (into ["pivot-grouping"]
+                                   (map (fn [[_direction _opts expr]]
+                                          (:lib/desired-column-alias (lib.equality/find-matching-column expr cols))))
+                                   (lib/order-bys first-query))
+          hsql               {:order-by (mapv (fn [col-name]
+                                                [(h2x/identifier :table-alias col-name) :asc #_:nulls-last])
+                                              order-by-col-names)}
+          [sql & params]     (sql.qp/format-honeysql driver hsql)]
+      (assert (empty? params))
+      (log/debugf "Adding ORDER BY to UNION ALL query:\n%s" sql)
+      sql)))
+
+(mu/defn combine-native-queries :- ::compiled-legacy-query
+  "Combine multiple native queries into a single one with `UNION ALL`."
+  [_driver  :- :keyword
+   queries :- [:sequential {:min 1} ::compiled-pmbql-query]]
+  (let [combined-sql    (str/join
+                         "\nUNION ALL\n"
+                         (for [query queries]
+                           (str \(
+                                (get-in query [:stages 0 :native])
+                                \))))
+        ;; order-by        (MEGA-HACK-combine-native-queries-order-by driver queries)
+        ;; combined-sql    (if order-by
+        ;;                   (str combined-sql \newline order-by)
+        ;;                   combined-sql)
+        combined-params (into []
+                              (mapcat (fn [query]
+                                        (get-in query [:stages 0 :params])))
+                              queries)]
+    (as-> (first queries) query
+      (lib.convert/->legacy-MBQL query)
+      (update query :native #(assoc % :query combined-sql, :params combined-params))
+      (assoc-in query [:info :query-hash] (qp.util/query-hash query)))))
+
+(mu/defn EXPERIMENTAL-execute-multiple-queries :- :some
+  "Default implementation of [[metabase.driver/EXPERIMENTAL-execute-multiple-queries]] for JDBC-based drivers."
+  [driver  :- :keyword
+   queries :- [:sequential {:min 1} ::compiled-pmbql-query]
+   respond :- ::qp.schema/respond]
+  (let [query   (combine-native-queries driver queries)
+        context {:canceled-chan qp.pipeline/*canceled-chan*}]
+    (execute-reducible-query driver query context respond)))
+
+(mu/defn reducible-query :- (lib.schema.common/instance-of-class clojure.lang.IReduceInit)
+  "Returns a reducible collection of rows as maps from `db` and a given SQL query. This is similar
+  to [[jdbc/reducible-query]] but reuses the driver-specific configuration for the Connection and
+  Statement/PreparedStatement. This is slightly different from [[execute-reducible-query]] in that it is not intended
+  to be used as part of middleware. Keywordizes column names. "
   {:added "0.49.0", :arglists '([db [sql & params]])}
-  [db [sql & params]]
+  [db             :- [:map
+                      [:id     ::lib.schema.id/database]
+                      [:engine :keyword]]
+   [sql & params] :- [:cat ::sql [:* :any]]]
   (let [driver (:engine db)]
     (reify clojure.lang.IReduceInit
       (reduce [_ rf init]
@@ -755,7 +855,7 @@
            (with-open [stmt          (statement-or-prepared-statement driver conn sql params nil)
                        ^ResultSet rs (try
                                        (let [max-rows 0] ; 0 means no limit
-                                          (execute-statement-or-prepared-statement! driver stmt max-rows params sql))
+                                         (execute-statement-or-prepared-statement! driver stmt max-rows params sql))
                                        (catch Throwable e
                                          (throw (ex-info (tru "Error executing query: {0}" (ex-message e))
                                                          {:driver driver
