@@ -37,6 +37,14 @@ const shouldUseEslint =
   process.env.WEBPACK_BUNDLE !== "production" &&
   process.env.USE_ESLINT === "true";
 const shouldEnableHotRefresh = WEBPACK_BUNDLE === "hot";
+const disableSourceMaps = !!process.env.DISABLE_SOURCE_MAPS;
+
+console.log(
+  process.env.DISABLE_SOURCE_MAPS,
+  "disableSourceMaps",
+  { disableSourceMaps },
+  disableSourceMaps,
+);
 
 // Babel:
 const BABEL_CONFIG = {
@@ -409,5 +417,5 @@ if (devMode) {
     }),
   );
 } else {
-  config.devtool = "source-map";
+  config.devtool = disableSourceMaps ? false : "source-map";
 }
