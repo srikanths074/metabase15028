@@ -34,6 +34,7 @@ const edition = process.env.MB_EDITION || "oss";
 const shouldUseEslint =
   process.env.WEBPACK_BUNDLE !== "production" &&
   process.env.USE_ESLINT === "true";
+const shouldEnableHotRefresh = WEBPACK_BUNDLE === "hot";
 
 // Babel:
 const BABEL_CONFIG = {
@@ -51,7 +52,7 @@ const SWC_LOADER = {
       transform: {
         react: {
           runtime: "automatic",
-          refresh: devMode,
+          refresh: shouldEnableHotRefresh,
         },
       },
       parser: {
@@ -130,6 +131,7 @@ const config = {
     filename: "[name].[contenthash].js",
     publicPath: "app/dist/",
     hashFunction: "sha256",
+    clean: !devMode,
   },
 
   module: {
@@ -338,7 +340,7 @@ const config = {
   ],
 };
 
-if (WEBPACK_BUNDLE === "hot") {
+if (shouldEnableHotRefresh) {
   config.target = "web";
 
   if (!config.output || !config.plugins) {
@@ -386,11 +388,7 @@ if (WEBPACK_BUNDLE === "hot") {
   );
 }
 
-if (WEBPACK_BUNDLE !== "production") {
-  if (!config.output || !config.resolve || !config.plugins) {
-    throw new Error("webpack config is missing configuration");
-  }
-
+if (devMode) {
   // replace minified files with un-minified versions
   for (const name in config.resolve.alias) {
     const minified = config.resolve.alias[name];
