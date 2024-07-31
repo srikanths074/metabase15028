@@ -1,4 +1,10 @@
-import { LineChart, BarChart, ScatterChart, CustomChart } from "echarts/charts";
+import {
+  LineChart,
+  BarChart,
+  ScatterChart,
+  CustomChart,
+  SankeyChart,
+} from "echarts/charts";
 import {
   BrushComponent,
   DataZoomComponent,
@@ -25,6 +31,7 @@ export const registerEChartsModules = () => {
     ToolboxComponent,
     BrushComponent,
     DatasetComponent,
+    SankeyChart,
     LabelLayout,
   ]);
 };

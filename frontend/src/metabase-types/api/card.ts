@@ -190,6 +190,11 @@ export type VisualizationSettings = {
   "scalar.switch_positive_negative"?: boolean;
   "scalar.compact_primary_number"?: boolean;
 
+  // Sankey settings
+  "sankey.source"?: string;
+  "sankey.destination"?: string;
+  "sankey.value"?: string;
+
   [key: string]: any;
 };
 

@@ -6,7 +6,7 @@ import { EChartsRenderer } from "metabase/visualizations/components/EChartsRende
 import { ResponsiveEChartsRendererStyled } from "metabase/visualizations/components/EChartsRenderer/ResponsiveEChartsRenderer.styled";
 
 export interface ResponsiveEChartsRendererProps extends EChartsRendererProps {
-  onResize: (width: number, height: number) => void;
+  onResize?: (width: number, height: number) => void;
   width: number;
   height: number;
   // We don't use the `style` prop, but it's needed to prevent a type error due
@@ -28,7 +28,7 @@ function _ResponsiveEChartsRenderer({
 }: ResponsiveEChartsRendererProps) {
   useEffect(() => {
     if (width != null && height != null) {
-      onResize(width, height);
+      onResize?.(width, height);
     }
   }, [width, height, onResize]);
 
