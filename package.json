@@ -135,7 +135,6 @@
     "@cypress/grep": "^4.0.1",
     "@cypress/skip-test": "^2.6.1",
     "@emotion/babel-plugin": "^11.11.0",
-    "@esbuild-plugins/node-modules-polyfill": "^0.2.2",
     "@inquirer/prompts": "^5.3.8",
     "@loki/create-async-callback": "^0.35.0",
     "@pmmmwh/react-refresh-webpack-plugin": "0.5.10",
@@ -227,7 +226,7 @@
     "cypress-multi-reporters": "^1.6.4",
     "cypress-real-events": "^1.12.0",
     "cypress-terminal-report": "^6.1.2",
-    "esbuild": "^0.21.1",
+    "esbuild-plugin-polyfill-node": "^0.3.0",
     "eslint": "7.32.0",
     "eslint-import-resolver-webpack": "^0.8.3",
     "eslint-plugin-cypress": "^2.12.1",
@@ -315,6 +314,7 @@
     "ansi-regex": "5.0.1",
     "d3-color": "^3.1.0",
     "debug": "^4.3.4",
+    "esbuild": "^0.21.0",
     "follow-redirects": "^1.15.5",
     "jsdom": "^22.1.0",
     "json5": "2.2.2",
@@ -385,9 +385,8 @@
     "lint-prettier": "yarn && yarn lint-prettier-pure",
     "lint-prettier-pure": "prettier --check '{frontend,enterprise/frontend,e2e}/**/*.{js,jsx,ts,tsx,css}'",
     "lint-yaml": "yamllint **/*.{yaml,yml} --ignore=node_modules/**/*.{yaml,yml}",
-    "postinstall": "yarn yarn-deduplicate --scopes @babel && patch-package",
+    "postinstall": "patch-package",
     "precommit": "lint-staged --shell",
-    "preinstall": "echo $npm_execpath | grep -q yarn || echo '\\033[0;33mSorry, npm is not supported. Please use Yarn (https://yarnpkg.com/).\\033[0m'",
     "prepare": "husky install",
     "prettier": "prettier --write '{frontend,enterprise/frontend,e2e}/**/*.{js,jsx,ts,tsx,css}'",
     "remove-webpack-cache": "rm -rf ./node_modules/.cache",
@@ -448,5 +447,16 @@
   },
   "browserslist": [
     "defaults"
+  ],
+  "trustedDependencies": [
+    "@swc/core",
+    "aws-sdk",
+    "core-js",
+    "core-js-pure",
+    "cypress",
+    "deasync",
+    "esbuild",
+    "fsevents",
+    "postinstall-postinstall"
   ]
 }
