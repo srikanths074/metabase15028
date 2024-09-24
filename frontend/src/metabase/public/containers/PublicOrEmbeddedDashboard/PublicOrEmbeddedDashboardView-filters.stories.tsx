@@ -1,7 +1,7 @@
 // @ts-expect-error There is no type definition
 import createAsyncCallback from "@loki/create-async-callback";
 import type { StoryContext, StoryFn } from "@storybook/react";
-import { userEvent, within } from "@storybook/testing-library";
+import { userEvent, within } from "@storybook/test";
 import { type ComponentProps, useEffect } from "react";
 import { Provider } from "react-redux";
 
@@ -59,6 +59,7 @@ export default {
 };
 
 function ReduxDecorator(Story: StoryFn, context: StoryContext) {
+  // @ts-expect-error -- custom prop to support non JSON-serializable value as args
   const parameterType: ParameterType = context.args.parameterType;
   const initialState = createMockState({
     settings: createMockSettingsState({
