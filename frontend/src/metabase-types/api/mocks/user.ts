@@ -9,6 +9,7 @@ export const createMockUser = (opts?: Partial<User>): User => ({
   email: "user@metabase.test",
   locale: null,
   google_auth: false,
+  ldap_auth: false,
   login_attributes: null,
   is_active: true,
   is_qbnewb: false,
@@ -20,6 +21,7 @@ export const createMockUser = (opts?: Partial<User>): User => ({
   date_joined: new Date().toISOString(),
   first_login: new Date().toISOString(),
   last_login: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
   sso_source: null,
   ...opts,
 });
