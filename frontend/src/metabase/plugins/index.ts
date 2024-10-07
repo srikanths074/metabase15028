@@ -6,7 +6,6 @@ import type {
   SetStateAction,
 } from "react";
 import { t } from "ttag";
-import _ from "underscore";
 import type { AnySchema } from "yup";
 
 import noResultsSource from "assets/img/no_results.svg";
@@ -33,6 +32,7 @@ import type {
   ModelFilterControlsProps,
   ModelFilterSettings,
 } from "metabase/browse/models";
+import { InsightsTab } from "metabase/common/components/Sidesheet/components/InsightsTab";
 import { getIconBase } from "metabase/lib/icon";
 import PluginPlaceholder from "metabase/plugins/components/PluginPlaceholder";
 import type { SearchFilterComponent } from "metabase/search/types";
@@ -339,6 +339,7 @@ export type CollectionAuthorityLevelIcon = ComponentType<
     collection: Pick<Collection, "authority_level">;
     tooltip?: "default" | "belonging";
     archived?: boolean;
+    showIconForRegularCollection?: boolean;
   }
 >;
 
@@ -549,6 +550,7 @@ export const PLUGIN_QUERY_BUILDER_HEADER = {
 
 export const PLUGIN_AUDIT = {
   isAuditDb: (_db: DatabaseType) => false,
+  InsightsTabOrLink: InsightsTab,
 };
 
 export const PLUGIN_UPLOAD_MANAGEMENT = {
