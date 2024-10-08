@@ -1,4 +1,3 @@
-import fetchMock from "fetch-mock";
 import { Route } from "react-router";
 
 import { setupEnterprisePlugins } from "__support__/enterprise";
@@ -37,18 +36,13 @@ export const setup = async ({
   settings = createMockSettings(),
   user,
   hasEnterprisePlugins,
-}: SetupOpts) => {
+}: SetupOpts = {}) => {
   const currentUser = createMockUser(user);
   setupCardEndpoints(card);
   setupUsersEndpoints([currentUser]);
   setupRevisionsEndpoints([]);
   setupPerformanceEndpoints([]);
   setupAuditEndpoints();
-
-  fetchMock.get("path:/api/ee/audit-app/user/audit-info", {
-    dashboard_overview: 201,
-    question_overview: 202,
-  });
 
   const state = createMockState({
     currentUser,

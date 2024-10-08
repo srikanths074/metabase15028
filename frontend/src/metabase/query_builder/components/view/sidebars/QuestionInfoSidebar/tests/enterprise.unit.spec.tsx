@@ -45,7 +45,7 @@ describe("QuestionInfoSidebar > enterprise", () => {
   describe("tabs", () => {
     describe("for non-admins", () => {
       it("should show tabs for Overview and History", async () => {
-        setup({});
+        await setup();
         const tabs = await screen.findAllByRole("tab");
         expect(tabs).toHaveLength(2);
         expect(tabs.map(tab => tab.textContent)).toEqual([
