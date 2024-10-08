@@ -104,7 +104,10 @@ export type ClauseType =
   | "aggregation"
   | "breakout"
   | "order-by"
-  | "limit";
+  | "limit"
+  | "native";
+
+export type StageType = "mbql" | "native";
 
 export type Limit = number | null;
 
@@ -574,6 +577,12 @@ export type DrillThruDisplayInfo =
   | ZoomTimeseriesDrillThruInfo;
 
 export type FilterDrillDetails = {
+  query: Query;
+  stageIndex: number;
+  column: ColumnMetadata;
+};
+
+export type CombineColumnsDrillDetails = {
   query: Query;
   stageIndex: number;
   column: ColumnMetadata;

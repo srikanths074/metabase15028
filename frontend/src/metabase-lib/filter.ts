@@ -1,7 +1,7 @@
 import moment from "moment-timezone"; // eslint-disable-line no-restricted-imports -- deprecated usage
 
 import * as ML from "cljs/metabase.lib.js";
-import type { DatasetColumn, TemporalUnit } from "metabase-types/api";
+import type { CardId, DatasetColumn, TemporalUnit } from "metabase-types/api";
 
 import {
   isBoolean,
@@ -952,10 +952,11 @@ export function updateNumericFilter(
   query: Query,
   stageIndex: number,
   numericColumn: DatasetColumn,
+  cardId: CardId | undefined,
   start: number,
   end: number,
 ): Query {
-  return ML.update_numeric_filter(query, stageIndex, numericColumn, start, end);
+  return ML.update_numeric_filter(query, stageIndex, numericColumn, cardId, start, end);
 }
 
 /**
@@ -966,6 +967,7 @@ export function updateTemporalFilter(
   query: Query,
   stageIndex: number,
   temporalColumn: DatasetColumn,
+  cardId: CardId | undefined,
   start: string | Date,
   end: string | Date,
 ): Query {
@@ -973,6 +975,7 @@ export function updateTemporalFilter(
     query,
     stageIndex,
     temporalColumn,
+    cardId,
     start,
     end,
   );

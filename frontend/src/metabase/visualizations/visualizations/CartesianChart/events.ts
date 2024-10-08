@@ -274,7 +274,7 @@ export const canBrush = (
     !!onChangeCardAndRun &&
     hasBrushableDimension &&
     !hasCombinedCards &&
-    !isNative(series[0].card) &&
+    // !isNative(series[0].card) &&
     !isRemappedToString(series) &&
     !hasClickBehavior(series)
   );
@@ -773,11 +773,15 @@ export const getBrushData = (
   const start = checkNumber(range[0]);
   const end = checkNumber(range[1]);
 
+  // console.log("getBrushData")
+  // console.log(isTimeSeries)
+
   if (isTimeSeries) {
     const nextQuery = Lib.updateTemporalFilter(
       query,
       stageIndex,
       column,
+      question.id(),
       new Date(start).toISOString(),
       new Date(end).toISOString(),
     );
@@ -794,6 +798,7 @@ export const getBrushData = (
     query,
     stageIndex,
     column,
+    question.id(),
     start,
     end,
   );
