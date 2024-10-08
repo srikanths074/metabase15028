@@ -10,7 +10,7 @@ describe("InsightsTabOrLink (OSS)", () => {
   });
   it("renders a tab for admins", async () => {
     setup({
-      isUserAdmin: false,
+      isUserAdmin: true,
     });
     const tab = await screen.findByRole("tab");
     expect(tab).toBeInTheDocument();
