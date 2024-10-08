@@ -1,13 +1,19 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { setup } from "./setup";
+import { type SetupOpts, setup as baseSetup } from "./setup";
 
-describe("InsightsTabOrLink (EE)", () => {
+const setup = (props: Omit<SetupOpts, "enableAuditAppPlugin">) => {
+  return baseSetup({
+    enableAuditAppPlugin: true,
+    ...props,
+  });
+};
+
+describe("InsightsTabOrLink (EE with token)", () => {
   describe("for admins", () => {
     it("renders a link for a dashboard", async () => {
       const { history } = setup({
-        enableAuditAppPlugin: true,
         isForADashboard: true,
         isUserAdmin: true,
       });
@@ -25,7 +31,6 @@ describe("InsightsTabOrLink (EE)", () => {
 
     it("can render a link for a question", async () => {
       const { history } = setup({
-        enableAuditAppPlugin: true,
         isForADashboard: false,
         isUserAdmin: true,
       });
@@ -43,7 +48,6 @@ describe("InsightsTabOrLink (EE)", () => {
   describe("for non-admins", () => {
     it("renders nothing", async () => {
       setup({
-        enableAuditAppPlugin: true,
         isForADashboard: true,
         isUserAdmin: false,
       });

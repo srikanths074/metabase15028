@@ -1,9 +1,9 @@
 import { t } from "ttag";
 
-import type { InsightsTabOrLinkProps } from "metabase/common/components/Sidesheet/components/InsightsTab/InsightsTab";
 import SidesheetS from "metabase/common/components/Sidesheet/sidesheet.module.css";
 import Link from "metabase/core/components/Link";
 import * as Urls from "metabase/lib/urls";
+import type { InsightsLinkProps } from "metabase/plugins";
 import { Flex, Icon } from "metabase/ui";
 import { useGetAuditInfoQuery } from "metabase-enterprise/api";
 import type { Collection } from "metabase-types/api";
@@ -13,8 +13,8 @@ import S from "./InsightsLink.module.css";
 export const InsightsLink = ({
   question,
   dashboard,
-  ...props
-}: InsightsTabOrLinkProps) => {
+  ...linkProps
+}: InsightsLinkProps) => {
   const { data: auditInfo, error, isLoading } = useGetAuditInfoQuery();
 
   const collection = dashboard
@@ -58,7 +58,7 @@ export const InsightsLink = ({
         to={instanceAnalyticsUrl}
         className={S.InsightsLink}
         role="link"
-        {...props}
+        {...linkProps}
       >
         <Flex gap="xs">
           <Icon name="external" />

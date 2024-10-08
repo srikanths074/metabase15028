@@ -23,5 +23,5 @@ if (hasPremiumFeature("audit_app")) {
 
   PLUGIN_AUDIT.isAuditDb = isAuditDb;
 
-  PLUGIN_AUDIT.InsightsTabOrLink = InsightsLink;
+  PLUGIN_AUDIT.InsightsLink = InsightsLink;
 }

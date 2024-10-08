@@ -5,7 +5,6 @@ import { setupEnterprisePlugins } from "__support__/enterprise";
 import { mockSettings } from "__support__/settings";
 import { createMockEntitiesState } from "__support__/store";
 import { renderWithProviders } from "__support__/ui";
-import { PLUGIN_AUDIT } from "metabase/plugins";
 import { Tabs } from "metabase/ui";
 import type { CardId, CollectionId, DashboardId } from "metabase-types/api";
 import {
@@ -16,6 +15,8 @@ import {
   createMockUser,
 } from "metabase-types/api/mocks";
 import { createMockState } from "metabase-types/store/mocks";
+
+import { InsightsTabOrLink } from "../InsightsTabOrLink";
 
 interface AuditInfo {
   dashboard_overview: DashboardId;
@@ -29,15 +30,17 @@ const defaultAuditInfo: AuditInfo = {
   custom_reports: 203,
 };
 
+export type SetupOpts = {
+  isForADashboard?: boolean;
+  enableAuditAppPlugin?: boolean;
+  isUserAdmin?: boolean;
+};
+
 export const setup = ({
-  isForADashboard,
-  enableAuditAppPlugin,
-  isUserAdmin,
-}: {
-  isForADashboard: boolean;
-  enableAuditAppPlugin: boolean;
-  isUserAdmin: boolean;
-}) => {
+  isForADashboard = false,
+  enableAuditAppPlugin = false,
+  isUserAdmin = false,
+}: SetupOpts = {}) => {
   const storeInitialState = createMockState({
     currentUser: createMockUser({ is_superuser: isUserAdmin }),
     entities: createMockEntitiesState({}),
@@ -68,9 +71,9 @@ export const setup = ({
           <Tabs>
             <Tabs.List>
               {isForADashboard ? (
-                <PLUGIN_AUDIT.InsightsTabOrLink dashboard={mockDashboard} />
+                <InsightsTabOrLink dashboard={mockDashboard} />
               ) : (
-                <PLUGIN_AUDIT.InsightsTabOrLink question={mockQuestion} />
+                <InsightsTabOrLink question={mockQuestion} />
               )}
             </Tabs.List>
           </Tabs>
