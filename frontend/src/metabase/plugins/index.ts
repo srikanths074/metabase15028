@@ -6,6 +6,7 @@ import type {
   SetStateAction,
 } from "react";
 import { t } from "ttag";
+import _ from "underscore";
 import type { AnySchema } from "yup";
 
 import noResultsSource from "assets/img/no_results.svg";
