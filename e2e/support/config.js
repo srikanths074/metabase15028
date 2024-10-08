@@ -175,7 +175,6 @@ const mainConfig = {
   ...defaultConfig,
   ...(isEmbeddingSdk
     ? {
-        chromeWebSecurity: true,
         hosts: {
           "my-site.local": "127.0.0.1",
         },
