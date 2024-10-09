@@ -17,6 +17,7 @@
    [metabase.api.dashboard :as api.dashboard]
    [metabase.api.database :as api.database]
    [metabase.api.dataset :as api.dataset]
+   [metabase.api.dismissed-modal :as api.dismissed-modal]
    [metabase.api.email :as api.email]
    [metabase.api.embed :as api.embed]
    [metabase.api.field :as api.field]
@@ -149,6 +150,7 @@
   (context "/timeline"             [] (+auth api.timeline/routes))
   (context "/timeline-event"       [] (+auth api.timeline-event/routes))
   (context "/user"                 [] (+auth api.user/routes))
+  (context "/dismissed-modal"      [] (+auth api.dismissed-modal/routes))
   (context "/api-key"              [] (+auth api.api-key/routes))
   (context "/util"                 [] api.util/routes)
   (route/not-found (constantly {:status 404, :body (deferred-tru "API endpoint does not exist.")})))

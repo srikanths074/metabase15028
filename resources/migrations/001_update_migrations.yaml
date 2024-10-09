@@ -9484,6 +9484,67 @@ databaseChangeLog:
               WHERE "KEY" = 'embedding-app-origin';
       rollback: # not needed
 
+  - changeSet:
+      id: v51.2024-10-08T10:46:27
+      author: johnswanson
+      comment: >
+        add a table for user-level KV. This is intended for use as a lightweight mechanism for the frontend to be able
+        to mark things as seen, unseen, dismissed, etc
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+          - tableExists:
+              tableName: dismissed_modal
+      changes:
+        - createTable:
+            tableName: dismissed_modal
+            remarks: >
+              A simple table to store dismissed modals for the user. Keyed by user_id and `key`. The idea is that the
+              frontend can say things like 'this user has dismissed `collection-cleanup-modal-123`', where
+              `collection-cleanup-modal-123` is an opaque-to-the-backend key that's defined solely by the frontend.
+              The only possible values are present (therefore `true`) or not present (equivalent to `false`).
+            columns:
+              - column:
+                  name: id
+                  type: int
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: int
+                  remarks: 'The ID of the user this KV-pair is for'
+                  constraints:
+                    nullable: false
+                    referencedTableName: core_user
+                    referencedColumnNames: id
+                    foreignKeyName: fk_dismissed_modal_user_id
+              - column:
+                  name: key
+                  remarks: 'The key'
+                  type: varchar(254)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  remarks: 'When this row was created'
+                  type: ${timestamp_type}
+                  defaultValueComputed: current_timestamp
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: v51.2024-10-08T10:46:36
+      author: johnswanson
+      comment: Add a unique constraint for user_id,key
+      changes:
+        - addUniqueConstraint:
+            tableName: dismissed_modal
+            columnNames: user_id, key
+            constraintName: unique_dismissed_modal_user_id_key
+      rollback: # will be deleted with table
+
   # >>>>>>>>>> DO NOT ADD NEW MIGRATIONS BELOW THIS LINE! ADD THEM ABOVE <<<<<<<<<<
 
 ########################################################################################################################
