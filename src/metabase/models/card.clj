@@ -400,11 +400,62 @@
                         {:status-code 400})))))
   nil)
 
+(defn- dashboard-internal-card? [card]
+  (boolean (:dashboard_id card)))
+
+(def ^:dynamic ^:private *updating-dashboard* false)
+
+(defmacro with-allowed-changes-to-internal-dashboard-card
+  "Allow making changes to dashboard-internal cards that would not normally be allowed."
+  [& body]
+  `(binding [*updating-dashboard* true]
+     ~@body))
+
+(defn- was-dashboard-question? [card changes]
+  (or (dashboard-internal-card? card)
+      (and (contains? changes :dashboard_id)
+           (not (:dashboard_id changes)))))
+
+(defn- is-valid-dashboard-internal-card-for-update [card changes]
+  (or (and (not (was-dashboard-question? card changes))
+           (not (contains? changes :dashboard_id)))
+      (and
+       (was-dashboard-question? card changes)
+       (or *updating-dashboard* (not (contains? changes :collection_id)))
+       (not (contains? changes :collection_position))
+       (or (not (contains? changes :type))
+           (contains? #{:question "question" nil} (:type changes))))))
+
+(defn- assert-is-valid-dashboard-internal-update [changes card]
+  (when-not (is-valid-dashboard-internal-card-for-update card changes)
+    (throw (ex-info (tru "Invalid dashboard-internal card")
+                    {:status-code 400
+                     :changes changes
+                     :card card})))
+  changes)
+
+(defn- check-dashboard-internal-card-insert [card]
+  (let [correct-collection-id (t2/select-one-fn :collection_id [:model/Dashboard :collection_id] (:dashboard_id card))
+        invalid? (or (and (contains? card :collection_id)
+                          (not= correct-collection-id (:collection_id card)))
+                     (not (contains? #{:question "question" nil} (:type card)))
+                     (some? (:collection_position card)))]
+    (when invalid?
+      (throw (ex-info (tru "Invalid dashboard-internal card")
+                      {:status-code 400
+                       :card card})))
+    (assoc card :collection_id correct-collection-id)))
+
+(defn- maybe-check-dashboard-internal-card [card]
+  (cond-> card
+    (dashboard-internal-card? card) check-dashboard-internal-card-insert))
+
 ;; TODO -- consider whether we should validate the Card query when you save/update it?? (#40013)
 (defn- pre-insert [card]
   (let [defaults {:parameters         []
                   :parameter_mappings []}
-        card     (merge defaults card)]
+        card     (maybe-check-dashboard-internal-card
+                  (merge defaults card))]
     (u/prog1 card
       ;; make sure this Card doesn't have circular source query references
       (check-for-circular-source-query-references card)
@@ -562,6 +613,7 @@
 
 (t2/define-before-update :model/Card
   [{:keys [verified-result-metadata?] :as card}]
+  (assert-is-valid-dashboard-internal-update (t2/changes card) card)
   ;; remove all the unchanged keys from the map, except for `:id`, so the functions below can do the right thing since
   ;; they were written pre-Toucan 2 and don't know about [[t2/changes]]...
   ;;
@@ -569,6 +621,7 @@
   ;; https://github.com/camsaul/toucan2/issues/145 .
   ;; TODO: ^ that's been fixed, this could be refactored
   (-> (into {:id (:id card)} (t2/changes (dissoc card :verified-result-metadata?)))
+
       maybe-normalize-query
       ;; If we have fresh result_metadata, we don't have to populate it anew. When result_metadata doesn't
       ;; change for a native query, populate-result-metadata removes it (set to nil) unless prevented by the
@@ -614,10 +667,10 @@
   ([{:keys [dataset_query result_metadata parameters parameter_mappings type] :as card-data} creator delay-event?]
    (let [data-keys                          [:dataset_query :description :display :name :visualization_settings
                                              :parameters :parameter_mappings :collection_id :collection_position
-                                             :cache_ttl :type]
-         ;; `zipmap` instead of `select-keys` because we want to get `nil` values for keys that aren't present. Required
-         ;; by `api/maybe-reconcile-collection-position!`
-         card-data                          (-> (zipmap data-keys (map card-data data-keys))
+                                             :cache_ttl :type :dashboard_id]
+         position-info                      {:collection_id (:collection_id card-data)
+                                             :collection_position (:collection_position card-data)}
+         card-data                          (-> (select-keys card-data data-keys)
                                                 (assoc
                                                  :creator_id (:id creator)
                                                  :parameters (or parameters [])
@@ -630,7 +683,7 @@
          card                               (t2/with-transaction [_conn]
                                               ;; Adding a new card at `collection_position` could cause other cards in
                                               ;; this collection to change position, check that and fix it if needed
-                                              (api/maybe-reconcile-collection-position! card-data)
+                                              (api/maybe-reconcile-collection-position! position-info)
                                               (t2/insert-returning-instance! Card (cond-> card-data
                                                                                     metadata
                                                                                     (assoc :result_metadata metadata))))]
@@ -787,9 +840,9 @@
                                          :text                (tru "Unverified due to edit")}))
     ;; ok, now save the Card
     (t2/update! Card (:id card-before-update)
-                ;; `collection_id` and `description` can be `nil` (in order to unset them).
-                ;; Other values should only be modified if they're passed in as non-nil
                 (u/select-keys-when card-updates
+                                    ;; `collection_id` and `description` can be `nil` (in order to unset them).
+                                    ;; Other values should only be modified if they're passed in as non-nil
                                     :present #{:collection_id :collection_position :description :cache_ttl :archived_directly}
                                     :non-nil #{:dataset_query :display :name :visualization_settings :archived
                                                :enable_embedding :type :parameters :parameter_mappings :embedding_params
@@ -864,6 +917,7 @@
     :table_id               (serdes/fk :model/Table)
     :source_card_id         (serdes/fk :model/Card)
     :collection_id          (serdes/fk :model/Collection)
+    :dashboard_id           (serdes/fk :model/Dashboard)
     :creator_id             (serdes/fk :model/User)
     :made_public_by_id      (serdes/fk :model/User)
     :dataset_query          {:export serdes/export-mbql :import serdes/import-mbql}
@@ -874,7 +928,8 @@
 
 (defmethod serdes/dependencies "Card"
   [{:keys [collection_id database_id dataset_query parameters parameter_mappings
-           result_metadata table_id source_card_id visualization_settings]}]
+           result_metadata table_id source_card_id visualization_settings
+           dashboard_id]}]
   (set
    (concat
     (mapcat serdes/mbql-deps parameter_mappings)
@@ -883,6 +938,7 @@
     (when table_id #{(serdes/table->path table_id)})
     (when source_card_id #{[{:model "Card" :id source_card_id}]})
     (when collection_id #{[{:model "Collection" :id collection_id}]})
+    (when dashboard_id #{[{:model "Dashboard" :id dashboard_id}]})
     (result-metadata-deps result_metadata)
     (serdes/mbql-deps dataset_query)
     (serdes/visualization-settings-deps visualization_settings))))

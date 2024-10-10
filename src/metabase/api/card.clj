@@ -465,7 +465,7 @@
 
 (api/defendpoint POST "/"
   "Create a new `Card`. Card `type` can be `question`, `metric`, or `model`."
-  [:as {{:keys [collection_id collection_position dataset_query description display name
+  [:as {{:keys [collection_id collection_position dataset_query description display name dashboard_id
                 parameters parameter_mappings result_metadata visualization_settings cache_ttl type], :as body} :body}]
   {name                   ms/NonBlankString
    type                   [:maybe ::card-type]
@@ -478,7 +478,8 @@
    collection_id          [:maybe ms/PositiveInt]
    collection_position    [:maybe ms/PositiveInt]
    result_metadata        [:maybe analyze/ResultsMetadata]
-   cache_ttl              [:maybe ms/PositiveInt]}
+   cache_ttl              [:maybe ms/PositiveInt]
+   dashboard_id           [:maybe ms/PositiveInt]}
   (check-if-card-can-be-saved dataset_query type)
   ;; check that we have permissions to run the query that we're trying to save
   (check-data-permissions-for-query dataset_query)
@@ -523,7 +524,7 @@
   "Update a `Card`."
   [id :as {{:keys [dataset_query description display name visualization_settings archived collection_id
                    collection_position enable_embedding embedding_params result_metadata parameters
-                   cache_ttl collection_preview type]
+                   cache_ttl collection_preview type dashboard_id]
             :as   card-updates} :body}]
   {id                     ms/PositiveInt
    name                   [:maybe ms/NonBlankString]
@@ -540,7 +541,8 @@
    collection_position    [:maybe ms/PositiveInt]
    result_metadata        [:maybe analyze/ResultsMetadata]
    cache_ttl              [:maybe ms/PositiveInt]
-   collection_preview     [:maybe :boolean]}
+   collection_preview     [:maybe :boolean]
+   dashboard_id           [:maybe ms/PositiveInt]}
   (check-if-card-can-be-saved dataset_query type)
   (let [card-before-update     (t2/hydrate (api/write-check Card id)
                                            [:moderation_reviews :moderator_details])
