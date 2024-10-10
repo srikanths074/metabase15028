@@ -172,5 +172,8 @@
       (prometheus/inc! :metabase-email/unknown-metric))) ; << Does not throw.
   (testing "inc is recorded for known metrics"
     (with-prometheus-system! [_ system]
-      (prometheus/inc! :metabase-email/messages)
-      (is (< 0 (-> system :registry :metabase-email/messages ops/read-value))))))
+      (let [read-value #(-> system :registry % ops/read-value)]
+        (doseq [metric [:metabase-email/messages :metabase-metrics/adjust-errors]]
+          (testing metric
+            (prometheus/inc! metric)
+            (is (< 0.9 (read-value metric) 1.1))))))))
