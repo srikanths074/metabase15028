@@ -4,12 +4,12 @@ import { setup } from "./setup";
 
 describe("InsightsTabOrLink (OSS)", () => {
   it("renders nothing for non-admins", async () => {
-    setup();
+    await setup();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
   it("renders a tab for admins", async () => {
-    setup({
+    await setup({
       isUserAdmin: true,
     });
     const tab = await screen.findByRole("tab");

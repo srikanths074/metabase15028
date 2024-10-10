@@ -1,12 +1,11 @@
-import fetchMock from "fetch-mock";
 import { Route } from "react-router";
 
 import { setupEnterprisePlugins } from "__support__/enterprise";
+import { setupAuditEndpoints } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
 import { createMockEntitiesState } from "__support__/store";
-import { renderWithProviders } from "__support__/ui";
+import { renderWithProviders, waitForLoaderToBeRemoved } from "__support__/ui";
 import { Tabs } from "metabase/ui";
-import type { CardId, CollectionId, DashboardId } from "metabase-types/api";
 import {
   createMockCollection,
   createMockDashboard,
@@ -18,25 +17,13 @@ import { createMockState } from "metabase-types/store/mocks";
 
 import { InsightsTabOrLink } from "../InsightsTabOrLink";
 
-interface AuditInfo {
-  dashboard_overview: DashboardId;
-  question_overview: CardId;
-  custom_reports: CollectionId;
-}
-
-const defaultAuditInfo: AuditInfo = {
-  dashboard_overview: 201,
-  question_overview: 202,
-  custom_reports: 203,
-};
-
 export type SetupOpts = {
   isForADashboard?: boolean;
   enableAuditAppPlugin?: boolean;
   isUserAdmin?: boolean;
 };
 
-export const setup = ({
+export const setup = async ({
   isForADashboard = false,
   enableAuditAppPlugin = false,
   isUserAdmin = false,
@@ -53,8 +40,7 @@ export const setup = ({
     ),
   });
 
-  fetchMock.get("path:/api/ee/audit-app/user/audit-info", defaultAuditInfo);
-
+  setupAuditEndpoints();
   setupEnterprisePlugins();
 
   const mockDashboard = createMockDashboard();
@@ -63,7 +49,7 @@ export const setup = ({
     collection: () => createMockCollection(),
   };
 
-  return renderWithProviders(
+  const utils = renderWithProviders(
     <>
       <Route
         path="/"
@@ -94,4 +80,8 @@ export const setup = ({
       withRouter: true,
     },
   );
+
+  await waitForLoaderToBeRemoved();
+
+  return utils;
 };

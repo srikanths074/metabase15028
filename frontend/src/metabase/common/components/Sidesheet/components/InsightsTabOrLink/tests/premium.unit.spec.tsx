@@ -13,7 +13,7 @@ const setup = (props: Omit<SetupOpts, "enableAuditAppPlugin">) => {
 describe("InsightsTabOrLink (EE with token)", () => {
   describe("for admins", () => {
     it("renders a link for a dashboard", async () => {
-      const { history } = setup({
+      const { history } = await setup({
         isForADashboard: true,
         isUserAdmin: true,
       });
@@ -30,7 +30,7 @@ describe("InsightsTabOrLink (EE with token)", () => {
     });
 
     it("can render a link for a question", async () => {
-      const { history } = setup({
+      const { history } = await setup({
         isForADashboard: false,
         isUserAdmin: true,
       });
@@ -47,7 +47,7 @@ describe("InsightsTabOrLink (EE with token)", () => {
 
   describe("for non-admins", () => {
     it("renders nothing", async () => {
-      setup({
+      await setup({
         isForADashboard: true,
         isUserAdmin: false,
       });
