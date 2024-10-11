@@ -83,9 +83,13 @@ function formatSummary(report) {
 
   let summary = "### Failed Tests Summary\n\n";
 
+  let isHeader = true;
   for (const [path, tests] of Object.entries(failedTestsByPath)) {
     summary += `| ${path} |\n`;
-    summary += "| :--- |\n";
+    if (isHeader) {
+      summary += "| :--- |\n";
+      isHeader = false;
+    }
 
     tests.forEach(test => {
       summary += `| ${test.title}`;
@@ -95,7 +99,7 @@ function formatSummary(report) {
       summary += `<code>${truncateError(test.error)}</code>`;
       summary += "</summary>";
       summary += `<pre>${test.error}</pre>`.replaceAll("\n", "<br>");
-      summary += `</details> |\n\n`;
+      summary += `</details> |\n`;
     });
   }
 
