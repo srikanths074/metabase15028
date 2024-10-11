@@ -162,6 +162,7 @@ describe("issue 16334", () => {
         "source-table": REVIEWS_ID,
       },
     };
+    cy.findByTestId("123");
 
     cy.createQuestion({
       name: "16334",
