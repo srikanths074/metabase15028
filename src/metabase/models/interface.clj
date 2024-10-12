@@ -20,6 +20,7 @@
    [metabase.util.cron :as u.cron]
    [metabase.util.encryption :as encryption]
    [metabase.util.i18n :refer [tru]]
+   [metabase.util.json :as json2]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
@@ -727,9 +728,8 @@
   [instance json-generator]
   (json.generate/encode-map instance json-generator))
 
-(json.generate/add-encoder
- Instance
- #'to-json)
+(json.generate/add-encoder Instance #'to-json)
+(json2/add-encoder Instance #(to-json %1 %2))
 
 ;;;; etc
 
