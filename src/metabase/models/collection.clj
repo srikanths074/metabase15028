@@ -11,7 +11,7 @@
     :as api
     :refer [*current-user-id* *current-user-permissions-set*]]
    [metabase.audit :as audit]
-   [metabase.config :refer [*request-id*]]
+   [metabase.config :as config :refer [*request-id*]]
    [metabase.db :as mdb]
    [metabase.events :as events]
    [metabase.models.collection.root :as collection.root]
@@ -414,17 +414,33 @@
    ;; large
    :ttl/threshold (* 60 60 1000)))
 
-(mu/defn user->personal-collection-and-descendant-ids :- [:sequential {:min 1} ms/PositiveInt]
+(def ^:private ^{:arglists '([user-id])} user->existing-personal-collection-id
+  "A cached function to fetch the ID of the Personal Collection belonging to the User with `user-id`. DOES NOT create
+  the personal collection if it does not exist!"
+  (memoize/ttl
+   ^{::memoize/args-fn (fn [[user-id]]
+                        [(mdb/unique-identifier) user-id])}
+   (fn user->existing-personal-collection-id*
+     [user-id]
+     (some-> user-id user->existing-personal-collection u/the-id))
+   :ttl/threshold (* 60 60 1000)))
+
+(mu/defn user->personal-collection-and-descendant-ids :- [:sequential ms/PositiveInt]
   "Somewhat-optimized function that fetches the ID of a User's Personal Collection as well as the IDs of all descendants
   of that Collection. Exists because this needs to be known to calculate the Current User's permissions set, which is
   done for every API call; this function is an attempt to make fetching this information as efficient as reasonably
   possible."
-  [user-or-id]
-  (let [personal-collection-id (user->personal-collection-id (u/the-id user-or-id))]
-    (cons personal-collection-id
-          ;; `descendant-ids` wants a CollectionWithLocationAndID, and luckily we know Personal Collections always go
-          ;; in Root, so we can pass it what it needs without actually having to fetch an entire CollectionInstance
-          (descendant-ids {:location "/", :id personal-collection-id}))))
+  [user-or-id {:keys [create?]}]
+  (let [user->coll-id (if create?
+                        user->personal-collection-id
+                        user->existing-personal-collection-id)
+        personal-collection-id (user->coll-id (u/the-id user-or-id))]
+    (if personal-collection-id
+      (cons personal-collection-id
+            ;; `descendant-ids` wants a CollectionWithLocationAndID, and luckily we know Personal Collections always go
+            ;; in Root, so we can pass it what it needs without actually having to fetch an entire CollectionInstance
+            (descendant-ids {:location "/", :id personal-collection-id}))
+      [])))
 
 (mi/define-batched-hydration-method include-personal-collection-ids
   :personal_collection_id
@@ -434,14 +450,19 @@
   (when (seq users)
     ;; efficiently create a map of user ID -> personal collection ID
     (let [user-id->collection-id (t2/select-fn->pk :personal_owner_id Collection
-                                                   :personal_owner_id [:in (set (map u/the-id users))])]
+                                                   :personal_owner_id [:in (set (map u/the-id users))])
+          user-id->is-api-key? (t2/select-pks-set :model/User
+                                                  :id [:in (set (map u/the-id users))]
+                                                  :type [:= :api-key])]
       (assert (map? user-id->collection-id))
       ;; now for each User, try to find the corresponding ID out of that map. If it's not present (the personal
       ;; Collection hasn't been created yet), then instead call `user->personal-collection-id`, which will create it
       ;; as a side-effect. This will ensure this property never comes back as `nil`
       (for [user users]
-        (assoc user :personal_collection_id (or (user-id->collection-id (u/the-id user))
-                                                (user->personal-collection-id (u/the-id user))))))))
+        (cond-> user
+          (not (contains? user-id->is-api-key? (u/the-id user)))
+          (assoc :personal_collection_id (or (user-id->collection-id (u/the-id user))
+                                             (user->personal-collection-id (u/the-id user)))))))))
 
 (mi/define-batched-hydration-method collection-is-personal
   :is_personal
@@ -592,26 +613,27 @@
         ;; c) their personal collection and its descendants
         :from [(if is-superuser?
                  [:collection :c]
-                 [{:union-all [{:select [:c.*]
-                                :from   [[:collection :c]]
-                                :join   [[:permissions :p]
-                                         [:= :c.id :p.collection_id]
-                                         [:permissions_group :pg] [:= :pg.id :p.group_id]
-                                         [:permissions_group_membership :pgm] [:= :pgm.group_id :pg.id]]
-                                :where  [:and
-                                         [:= :pgm.user_id current-user-id]
-                                         [:= :p.perm_type "perms/collection-access"]
-                                         [:or
-                                          [:= :p.perm_value "read-and-write"]
-                                          (when (= :read (:permission-level visibility-config))
-                                            [:= :p.perm_value "read"])]]}
-                               {:select [[:c.*]]
-                                :from   [[:collection :c]]
-                                :where  [:= :type "trash"]}
-                               (when-let [personal-collection-and-descendant-ids (user->personal-collection-and-descendant-ids current-user-id)]
-                                 {:select [:c.*]
-                                  :from   [[:collection :c]]
-                                  :where  [:in :id personal-collection-and-descendant-ids]})]}
+                 [{:union-all (remove nil?
+                                      [{:select [:c.*]
+                                        :from   [[:collection :c]]
+                                        :join   [[:permissions :p]
+                                                 [:= :c.id :p.collection_id]
+                                                 [:permissions_group :pg] [:= :pg.id :p.group_id]
+                                                 [:permissions_group_membership :pgm] [:= :pgm.group_id :pg.id]]
+                                        :where  [:and
+                                                 [:= :pgm.user_id current-user-id]
+                                                 [:= :p.perm_type "perms/collection-access"]
+                                                 [:or
+                                                  [:= :p.perm_value "read-and-write"]
+                                                  (when (= :read (:permission-level visibility-config))
+                                                    [:= :p.perm_value "read"])]]}
+                                       {:select [[:c.*]]
+                                        :from   [[:collection :c]]
+                                        :where  [:= :type "trash"]}
+                                       (when-let [personal-collection-and-descendant-ids (seq (user->personal-collection-and-descendant-ids current-user-id {:create? false}))]
+                                         {:select [:c.*]
+                                          :from   [[:collection :c]]
+                                          :where  [:in :id personal-collection-and-descendant-ids]})])}
                   :c])]
         ;; The `WHERE` clause is where we apply the other criteria we were given:
         :where [:and
@@ -1120,11 +1142,25 @@
 ;;; |                                       Toucan IModel & Perms Method Impls                                       |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
+(defn- assert-not-personal-collection-for-api-key
+  "If we create a personal collection for an API key, it's not great. It's also not going to break anything though, so
+  and verifying that we never create one here has a cost, as we're adding a query for every collection created here.
+
+  We'll compromise and run this check only in dev/tests. If we accidentally add a codepath that creates a personal
+  collection for an API key, it'll hopefully be caught here."
+  [{:keys [personal_owner_id]}]
+  (when (and
+         (not config/is-prod?)
+         (some? personal_owner_id)
+         (= :api-key (t2/select-one-fn :type [:model/User :type] personal_owner_id)))
+    (throw (ex-info "You can't create a personal collection for an API key user" {}))))
+
 ;;; ----------------------------------------------------- INSERT -----------------------------------------------------
 
 (t2/define-before-insert :model/Collection
   [{collection-name :name, :as collection}]
   (assert-valid-location collection)
+  (assert-not-personal-collection-for-api-key collection)
   (assert-valid-namespace (merge {:namespace nil} collection))
   (assoc collection :slug (slugify collection-name)))
 

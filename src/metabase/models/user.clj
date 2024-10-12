@@ -254,7 +254,8 @@
         (set (when-let [user-id (u/the-id user-or-id)]
                (concat
                 ;; Current User always gets readwrite perms for their Personal Collection and for its descendants! (1 DB Call)
-                (map perms/collection-readwrite-path (collection/user->personal-collection-and-descendant-ids user-or-id))
+                (some->> (collection/user->personal-collection-and-descendant-ids user-or-id {:create? false})
+                         (map perms/collection-readwrite-path))
                 ;; include the other Perms entries for any Group this User is in (1 DB Call)
                 (map :object (mdb.query/query {:select [:p.object]
                                                :from   [[:permissions_group_membership :pgm]]
