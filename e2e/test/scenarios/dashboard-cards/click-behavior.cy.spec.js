@@ -320,6 +320,7 @@ describe("scenarios > dashboard > dashboard cards > click behavior", () => {
     });
 
     it("allows setting dashboard with single parameter as custom destination", () => {
+      cy.findByTestId("123");
       cy.createDashboard(
         {
           ...TARGET_DASHBOARD,

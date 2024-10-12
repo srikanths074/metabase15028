@@ -1845,6 +1845,7 @@ describe("issue 25374", () => {
     "should retain comma-separated values when reverting to default (metabase#25374-3)",
     { tags: "@flaky" },
     () => {
+      cy.findByTestId("123");
       editDashboard();
       cy.findByTestId("edit-dashboard-parameters-widget-container")
         .findByText("Equal to")
@@ -1876,6 +1877,7 @@ describe("issue 25374", () => {
     "should retain comma-separated values when reverting to default via 'Reset all filters' (metabase#25374-4)",
     { tags: "@flaky" },
     () => {
+      cy.findByTestId("123");
       editDashboard();
       cy.findByTestId("edit-dashboard-parameters-widget-container")
         .findByText("Equal to")
