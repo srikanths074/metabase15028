@@ -114,6 +114,14 @@
 
           {group-id-1
            {database-id-1
+            {:create-queries {"PUBLIC" {table-id-1 :query-builder-and-native}}}}}
+          {group-id-1
+           {database-id-1
+            {:perms/create-queries {"PUBLIC" {table-id-1 :query-builder-and-native}}
+             :perms/view-data {"PUBLIC" {table-id-1 :unrestricted}}}}}
+
+          {group-id-1
+           {database-id-1
             {:create-queries {"PUBLIC" {table-id-1 :no}}}}}
           {group-id-1
            {database-id-1
@@ -481,15 +489,7 @@
                                     :create-queries :query-builder}))))
               (testing "revoke schema perms"
                 (is (= nil
-                       (set-perms! {:view-data :blocked}))))
-              (testing "disallow blocked data access + native querying"
-                (is (thrown-with-msg?
-                     Exception
-                     #"Invalid DB permissions: If you have write access for native queries, you must have data access to all schemas."
-                     (set-perms! {:view-data :blocked
-                                  :create-queries :query-builder-and-native})))
-                (is (= nil
-                       (perms)))))))))))
+                       (set-perms! {:view-data :blocked})))))))))))
 
 (deftest no-op-partial-graph-updates
   (testing "Partial permission graphs with no changes to the existing graph do not error when run repeatedly (#25221)"
